@@ -1023,5 +1023,41 @@
         "reason": "chain order: [mermaid 14] comes before [mermaid 15]"
       }
     ]
+  },
+  {
+    "taskNumber": 231,
+    "version": "edfd5c51c647b898960b87fe2bca5c4af7ba0281",
+    "title": "[folder 1] Start: confirm the current shared staging-worktree state",
+    "userDescription": "1. Start: the shared checkout folder is `<tmp>/taskTools-wt/<repo>-<hash>/staging` (`scripts/tackle-tasks/shared/stagingWorktree.ts:12`); the guard at `stagingWorktree.ts:31-35` throws when the folder is on the wrong branch and `git status --porcelain` is not empty; the merge tool at `scripts/merge-worktree-tasks/mergeTaskWorktrees.ts:888,895` passes the user's current branch instead of `staging`.",
+    "chainGoal": [
+      "When a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it. The chain is [folder 1] to [folder 9] from specs/awaiting-testing-folder.md."
+    ],
+    "goal": [
+      "- `sed -n '11,13p' scripts/tackle-tasks/shared/stagingWorktree.ts` confirms `stagingWorktreePath` returns `join(resolveTaskWorktreeConventionDirectory(projectRoot), \"staging\")`, with the command run and its output pasted.",
+      "- `sed -n '29,35p' scripts/tackle-tasks/shared/stagingWorktree.ts` confirms the guard throws when the found branch differs from the expected branch and `git status --porcelain` is not empty, with the command run and its output pasted.",
+      "- `sed -n '883,896p' scripts/merge-worktree-tasks/mergeTaskWorktrees.ts` confirms `runMergeCli` passes `parentSource.sourceBranch` to both `ensureStagingWorktree` and `mergeGroupBranchIntoRepo`, not the literal `\"staging\"`, with the command run and its output pasted.",
+      "- `sed -n '68,71p' scripts/shared/repositoryBranches.ts` confirms `collectRepositorySources` sets the parent path's `sourceBranch` to `currentBranchName(repoRoot)`, the branch actually checked out, ignoring the `rootBranch` argument passed in, so `parentSource.sourceBranch` really is the user's current branch, with the command run and its output pasted."
+    ],
+    "notInScope": [
+      "- changing `stagingWorktreePath`'s return value: owned by [folder 2]",
+      "- changing the wrong-branch guard's behavior: owned by [folder 3]",
+      "- changing `runMergeCli` to pass `\"staging\"`: owned by [folder 5]"
+    ],
+    "problemSolvedByTask": "Confirms the current pipeline state before the awaitingTesting rename chain begins: the shared folder is still literally named `staging`, the wrong-branch guard still throws on any non-empty `git status --porcelain`, and the merge tool still points the shared folder at the user's current branch instead of `staging`.",
+    "description": "This is a check-only Start task with no code change. stagingWorktreePath in scripts/tackle-tasks/shared/stagingWorktree.ts joins the convention directory with the literal folder name \"staging\", the same word the branch uses. The wrong-branch guard inside addOrVerifyLinkedWorktree throws whenever the found branch differs from the expected branch and git status --porcelain is not empty, with no distinction between real work and a stale index. runMergeCli in scripts/merge-worktree-tasks/mergeTaskWorktrees.ts passes parentSource.sourceBranch to both ensureStagingWorktree and mergeGroupBranchIntoRepo. collectRepositorySources in scripts/shared/repositoryBranches.ts sets that parent sourceBranch to whatever branch is currently checked out in repoRoot, ignoring the \"staging\" string passed as its rootBranch argument, so the merge tool really does point the shared folder at the user's own branch today. No test or other caller hardcodes the shared folder's basename as a literal path string; every caller reaches it through the stagingWorktreePath function.",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 1,
+    "blockedBy": [
+      {
+        "taskNumber": 230,
+        "reason": "chain order: [mermaid 15] comes before [folder 1]"
+      }
+    ]
   }
 ]
