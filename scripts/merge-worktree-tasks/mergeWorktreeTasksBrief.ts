@@ -7,7 +7,7 @@ const mergeTaskWorktreesPath = fileURLToPath(new URL("./mergeTaskWorktrees.ts", 
 
 const unmergedWorktrees = execFileSync("node", [mergeTaskWorktreesPath, "--discover"], { encoding: "utf8" }).trimEnd();
 
-// RETIRED (task 236): "work is now on the branch you were on when you ran --discover"
+// RETIRED (task 236): "work is now on your own branch, the one you ran --discover on"
 export const brief = `- repo root: ${repoRoot}
 - unmerged worktrees: ${unmergedWorktrees}
 
