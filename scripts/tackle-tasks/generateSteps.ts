@@ -383,13 +383,18 @@ function getDiagramWhereBoxHasArrows(box: string, parsedDiagrams: Map<string, Pa
 function remapNextAcrossDiagrams(diagramFile: string, next: Record<string, string[]>, parsedDiagrams: Map<string, ParsedDiagram>): Record<string, string[]> {
   const remapped: Record<string, string[]> = {};
   for (const [box, targets] of Object.entries(next)) {
-    remapped[box] = targets.map(target => {
-      if (next[target]!.length > 0) {
-        return target;
+    const remappedTargets: string[] = [];
+    for (const target of targets) {
+      const targetHasArrowsHere = next[target]!.length > 0;
+      if (targetHasArrowsHere) {
+        remappedTargets.push(target);
+        continue;
       }
       const homeDiagramFile = getDiagramWhereBoxHasArrows(target, parsedDiagrams, diagramFile);
-      return homeDiagramFile === undefined ? target : `${homeDiagramFile}::${target}`;
-    });
+      const targetHasNoHomeDiagram = homeDiagramFile === undefined;
+      remappedTargets.push(targetHasNoHomeDiagram ? target : `${homeDiagramFile}::${target}`);
+    }
+    remapped[box] = remappedTargets;
   }
   return remapped;
 }
@@ -563,7 +568,8 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
           }
           if (isNewBlockNode) {
             writeFileSync(scriptPath, buildNotImplementedStubScript(box, diagramFile));
-          } else {
+          }
+          else {
             writeFileSync(scriptPath, buildStubScript(box, diagramFile, producesPrompt));
           }
         }
