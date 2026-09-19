@@ -1137,5 +1137,40 @@
         "reason": "chain order: [folder 2] comes before [folder 3]"
       }
     ]
+  },
+  {
+    "taskNumber": 234,
+    "version": "e4f2d83d7eb16610d5701993a1462219c0502dc7",
+    "title": "[folder 4] By hand: remove every old staging-named worktree folder on this machine",
+    "userDescription": "4. The old folder named `staging` is gone from every repo on this machine that ran the pipeline.\n   WHY: the old folder still holds the `staging` branch. `git branch -f staging` refuses while another checkout holds the branch, so the first run after step 2 fails.\n   HOW: by hand, once per repo. Run `git -C <repo> worktree list` to find the `.../taskTools-wt/<repo>-<hash>/staging` line. Then run `git -C <repo> worktree remove --force <that path>` and `git -C <repo> worktree prune`. No pipeline code, no test. Only this machine runs the pipeline.",
+    "chainGoal": [
+      "When a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it. The chain is [folder 1] to [folder 9] from specs/awaiting-testing-folder.md."
+    ],
+    "goal": [
+      "- `ls \"${TMPDIR:-/tmp}/taskTools-wt\"` lists every `<repo>-<hash>` convention directory that ever ran the pipeline on this machine, with the command run and its output pasted.",
+      "- for each directory listed, `git -C \"${TMPDIR:-/tmp}/taskTools-wt/<repo>-<hash>/staging\" worktree list` shows the source repo's path (the worktree's linked main checkout), with the command run and its output pasted.",
+      "- for each source repo found, after running `git -C <repo> worktree remove --force <the .../staging path>` and `git -C <repo> worktree prune`, `git -C <repo> worktree list` no longer prints that `.../staging` line, with all commands and their output pasted."
+    ],
+    "notInScope": [
+      "- renaming the shared folder or changing its rebuild logic: owned by [folder 2] and [folder 3]",
+      "- pointing the merge tool's `--merge` CLI at `staging`: owned by [folder 5]",
+      "- proving a real tackle-tasks run finishes without the wrong-branch throw: owned by [folder 8]"
+    ],
+    "problemSolvedByTask": "The check proves no leftover worktree named literally `staging` still holds the `staging` branch on this machine, which would otherwise make `git branch -f staging` refuse and fail the first pipeline run after [folder 2] renames the folder.",
+    "description": "This is a by-hand, check-only task with no pipeline code and no test, scoped to this one machine, the only machine that runs the pipeline today. The old worktree folders were created under the convention directory resolveTaskWorktreeConventionDirectory builds in scripts/shared/prepareTasks.ts, one per repo, and each one's staging subfolder still holds the staging branch under its pre-rename name. git worktree remove --force followed by git worktree prune, run once per repo from that repo's own checkout, is the only cleanup git offers for a linked worktree; there is no bulk command. This task is done when every repo that ever ran the pipeline on this machine has had its old staging worktree removed, confirmed by git worktree list no longer listing it.",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 1,
+    "blockedBy": [
+      {
+        "taskNumber": 233,
+        "reason": "chain order: [folder 3] comes before [folder 4]"
+      }
+    ]
   }
 ]
