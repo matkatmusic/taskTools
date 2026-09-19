@@ -1248,5 +1248,37 @@
         "reason": "chain order: [folder 5] comes before [folder 6]"
       }
     ]
+  },
+  {
+    "taskNumber": 237,
+    "version": "881f444682b12885c7355d3f39811c82fb35c14c",
+    "title": "[folder 7] Full suite passes",
+    "userDescription": "7. `npm run test:baseline` passes with no failure outside `.taskTools/knownFailingTests.json`.\n   WHY: steps 2 to 6 each ran only their own test file.\n   HOW: one agent runs the baseline once and fixes code, never tests.",
+    "chainGoal": [
+      "When a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it. The chain is [folder 1] to [folder 9] from specs/awaiting-testing-folder.md."
+    ],
+    "goal": [
+      "- `npm run test:baseline` exits 0 with no failures outside `.taskTools/knownFailingTests.json`, confirming [folder 2] through [folder 6] leave no regression, with the command run and its output pasted."
+    ],
+    "notInScope": [
+      "- Any code change: this is a check-only task; a failure here is fixed by returning to whichever of [folder 2] through [folder 6] caused it, not by editing here.",
+      "- Rewriting the known-failing-tests baseline: only `/task-tests` may do that, and only when the user asks."
+    ],
+    "problemSolvedByTask": "Check-only item: [folder 2] through [folder 6] each ran only their own test file, so nothing so far has proven that running all of them together leaves the full suite at its committed baseline.",
+    "description": "This is a check-only task with no code change: run npm run test:baseline (scripts/shared/checkTestBaseline.ts) and paste its output. A pass confirms every prior item in the chain, [folder 2] through [folder 6], leaves the suite in the same state as the committed .taskTools/knownFailingTests.json baseline. A failure not already in that baseline means a prior chain item introduced a regression, fixed by returning to that item, never by editing here.",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 1,
+    "blockedBy": [
+      {
+        "taskNumber": 236,
+        "reason": "chain order: [folder 6] comes before [folder 7]"
+      }
+    ]
   }
 ]
