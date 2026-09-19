@@ -561,6 +561,76 @@ test("test_generateSteps_rewritesTheFileLineWhenDiagramStepsJsonScriptDiffers", 
     assert.equal(syncedEntry.script, "scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE.ts");
 });
 
+test("test_generateSteps_readsATakesSourceLockLabelIntoTheEntry", () => {
+    const { config } = generateFrom({
+        "one.mmd": "flowchart TD\n    A --> B\n    A[\"A<br/>takesSourceLock:true\"]\n    B[\"B\"]\n",
+    });
+    const entryA = config["one.mmd"]!.find(candidate => candidate.box === "A")!;
+    const entryB = config["one.mmd"]!.find(candidate => candidate.box === "B")!;
+    assert.equal(entryA.takesSourceLock, true);
+    assert.equal(entryB.takesSourceLock, undefined);
+});
+
+test("test_generateSteps_syncsTakesSourceLockBackIntoTheDiagramWhenConfigDiffers", () => {
+    const { config, configPath, diagramFolder, run } = generateFrom({
+        "one.mmd": "flowchart TD\n    A --> B\n    A[\"A\"]\n    B[\"B\"]\n",
+    });
+    const entry = config["one.mmd"]!.find(candidate => candidate.box === "A")!;
+    entry.takesSourceLock = true;
+    writeFileSync(configPath, JSON.stringify(config, null, 4));
+
+    run();
+    const diagram = readFileSync(join(diagramFolder, "one.mmd"), "utf8");
+    assert.equal(diagram, "flowchart TD\n    A --> B\n    A[\"A<br/>takesSourceLock:true\"]\n    B[\"B\"]\n");
+});
+
+test("test_generateSteps_movesTheTakesSourceLockLabelWhenTheStepListMovesTheFlag", () => {
+    const { config, configPath, diagramFolder, run } = generateFrom({
+        "one.mmd": "flowchart TD\n    A --> B\n    A[\"A<br/>takesSourceLock:true\"]\n    B[\"B\"]\n",
+    });
+    const entryA = config["one.mmd"]!.find(candidate => candidate.box === "A")!;
+    const entryB = config["one.mmd"]!.find(candidate => candidate.box === "B")!;
+    delete entryA.takesSourceLock;
+    entryB.takesSourceLock = true;
+    writeFileSync(configPath, JSON.stringify(config, null, 4));
+
+    run();
+    const diagram = readFileSync(join(diagramFolder, "one.mmd"), "utf8");
+    assert.equal(diagram, "flowchart TD\n    A --> B\n    A[\"A\"]\n    B[\"B<br/>takesSourceLock:true\"]\n");
+    const secondConfig = JSON.parse(readFileSync(configPath, "utf8"));
+    const syncedA = secondConfig["one.mmd"].find((candidate: { box: string }) => candidate.box === "A")!;
+    const syncedB = secondConfig["one.mmd"].find((candidate: { box: string }) => candidate.box === "B")!;
+    assert.equal(syncedA.takesSourceLock, undefined);
+    assert.equal(syncedB.takesSourceLock, true);
+});
+
+test("test_generateSteps_aDiagramOnlyEditToTakesSourceLockLosesToTheStepList", () => {
+    const { diagramFolder, configPath, run } = generateFrom({
+        "one.mmd": "flowchart TD\n    A --> B\n    A[\"A<br/>takesSourceLock:true\"]\n    B[\"B\"]\n",
+    });
+    const diagramPath = join(diagramFolder, "one.mmd");
+    writeFileSync(diagramPath, "flowchart TD\n    A --> B\n    A[\"A<br/>takesSourceLock:true\"]\n    B[\"B<br/>takesSourceLock:true\"]\n");
+
+    run();
+    const diagram = readFileSync(diagramPath, "utf8");
+    assert.equal(diagram, "flowchart TD\n    A --> B\n    A[\"A<br/>takesSourceLock:true\"]\n    B[\"B\"]\n");
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    const syncedA = config["one.mmd"].find((candidate: { box: string }) => candidate.box === "A")!;
+    const syncedB = config["one.mmd"].find((candidate: { box: string }) => candidate.box === "B")!;
+    assert.equal(syncedA.takesSourceLock, true);
+    assert.equal(syncedB.takesSourceLock, undefined);
+});
+
+test("test_generateSteps_leavesTakesSourceLockDiagramByteIdenticalWhenBothSidesAgree", () => {
+    const { diagramFolder, run } = generateFrom({
+        "one.mmd": "flowchart TD\n    A --> B\n    A[\"A<br/>takesSourceLock:true\"]\n    B[\"B\"]\n",
+    });
+    const diagramPath = join(diagramFolder, "one.mmd");
+    const diagram = readFileSync(diagramPath, "utf8");
+    run();
+    assert.equal(readFileSync(diagramPath, "utf8"), diagram);
+});
+
 test("test_generateSteps_leavesTheDiagramByteIdenticalWhenScriptMatchesTheFileLine", () => {
     const { diagramFolder, run } = generateFrom({
         "one.mmd": "flowchart TD\n    A --> B\n    A[\"A<br/>file:scripts/tackle-tasks/preambleStatusCheck/CREATE_WORKTREE.ts\"]\n",

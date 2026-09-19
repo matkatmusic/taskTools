@@ -423,6 +423,7 @@
             "script": "scripts/tackle-tasks/lockSourceRepo/LOCK_SOURCE_REPO.ts",
             "template": "scripts/tackle-tasks/lockSourceRepo/LOCK_SOURCE_REPO.template.json",
             "producesPrompt": false,
+            "takesSourceLock": true,
             "next": [
                 "WAS_LOCK_ACQUIRED_Q"
             ]

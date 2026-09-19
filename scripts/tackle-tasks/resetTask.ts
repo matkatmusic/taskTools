@@ -43,7 +43,7 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     const diagramFolderSetting = resolveDiagramFolderSetting(repoRoot);
     generateSteps(diagramFolderSetting.diagramFolder, diagramFolderSetting.stepsRoot, stepsConfigPath, diagramFolderSetting.allowStubs);
   }
-  const stepsByDiagram: Record<string, { box: string; script: string; next: string[] }[] | string> = JSON.parse(readFileSync(stepsConfigPath, "utf-8"));
+  const stepsByDiagram: Record<string, { box: string; script: string; next: string[]; takesSourceLock?: boolean }[] | string> = JSON.parse(readFileSync(stepsConfigPath, "utf-8"));
   const stepKeysNamingBlock: string[] = [];
   for (const [diagram, entries] of Object.entries(stepsByDiagram)) {
     const isStartValue = typeof entries === "string";
@@ -62,7 +62,7 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
   const stepKey = stepKeysNamingBlock[0] ?? "";
 
   // Same walk as runStepHook.ts isInsideSourceLock: reachable from LOCK_SOURCE_REPO without entering an exit diagram.
-  const stepsByKey = new Map<string, { next: string[]; diagram: string }>();
+  const stepsByKey = new Map<string, { next: string[]; diagram: string; takesSourceLock?: boolean }>();
   for (const [diagram, entries] of Object.entries(stepsByDiagram)) {
     const isStartValue = typeof entries === "string";
     if (isStartValue) {
@@ -81,7 +81,16 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     return [...stepsByKey.keys()].find((key) => key.slice(key.indexOf("::") + 2) === boxReference) ?? sameDiagramKey;
   };
   const exitDiagrams = ["pipeline-failuresExit.mmd", "pipeline-mergeSucceededExit.mmd"];
-  const lockStepKey = [...stepsByKey.keys()].find((key) => key.endsWith("::LOCK_SOURCE_REPO"));
+  // RETIRED (task 223): the lock block is found by the takesSourceLock flag, not this literal.
+  // const lockStepKey = [...stepsByKey.keys()].find((key) => key.endsWith("::LOCK_SOURCE_REPO"));
+  let lockStepKey: string | undefined;
+  for (const [key, step] of stepsByKey) {
+    const takesSourceLock = step.takesSourceLock === true;
+    if (takesSourceLock) {
+      lockStepKey = key;
+      break;
+    }
+  }
   const reachedFromLock = new Set<string>();
   const toVisit = lockStepKey === undefined ? [] : stepsByKey.get(lockStepKey)!.next.map((box) => getStepKey(box, stepsByKey.get(lockStepKey)!.diagram));
   while (toVisit.length > 0) {

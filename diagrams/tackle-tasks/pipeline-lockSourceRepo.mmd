@@ -3,7 +3,7 @@ flowchart TB
 
   subgraph lockSourceRepo ["Input: a committed, reviewed implementation"]
     direction TB
-    LOCK_SOURCE_REPO["LOCK_SOURCE_REPO"]
+    LOCK_SOURCE_REPO["LOCK_SOURCE_REPO<br/>takesSourceLock:true"]
     WAS_LOCK_ACQUIRED_Q["was the lock acquired?"]
     HAS_LOCK_WAIT_DEADLINE_PASSED_Q["has the lock wait deadline passed?"]
     WAIT_FOR_LOCK["wait 5s"]

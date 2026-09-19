@@ -1949,7 +1949,7 @@ test("test_runStepHook_takesTheSourceLockWhenTheNamedBlockSitsInsideTheLock", ()
     const seeded = seedAnEndedRunReadyToStartAtABlock({ box: "W", scriptSignal: "continue" });
     const configFile = configWith(writeStep => ({
         [PREAMBLE_DIAGRAM]: [{ box: PREAMBLE_BOX, script: writeStep(PREAMBLE_BOX, { scriptSignal: "stop" }), next: [] }],
-        "pipeline-lockSourceRepo.mmd": [{ box: "LOCK_SOURCE_REPO", script: writeStep("LOCK_SOURCE_REPO", { scriptSignal: "continue" }), next: ["X"] }],
+        "pipeline-lockSourceRepo.mmd": [{ box: "LOCK_SOURCE_REPO", script: writeStep("LOCK_SOURCE_REPO", { scriptSignal: "continue" }), takesSourceLock: true, next: ["X"] }],
         "x.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
     }));
     const { result } = runHook(`/run-step X ${JSON.stringify({ taskNumber: 7, tasksFile: seeded.tasksFile })}`, configFile, undefined, seeded.priorPacketCommand);
@@ -1962,7 +1962,7 @@ test("test_runStepHook_takesNoSourceLockForABlockInAnExitDiagram", () => {
     const seeded = seedAnEndedRunReadyToStartAtABlock({ box: "W", scriptSignal: "continue" });
     const configFile = configWith(writeStep => ({
         [PREAMBLE_DIAGRAM]: [{ box: PREAMBLE_BOX, script: writeStep(PREAMBLE_BOX, { scriptSignal: "stop" }), next: [] }],
-        "pipeline-lockSourceRepo.mmd": [{ box: "LOCK_SOURCE_REPO", script: writeStep("LOCK_SOURCE_REPO", { scriptSignal: "continue" }), next: ["X"] }],
+        "pipeline-lockSourceRepo.mmd": [{ box: "LOCK_SOURCE_REPO", script: writeStep("LOCK_SOURCE_REPO", { scriptSignal: "continue" }), takesSourceLock: true, next: ["X"] }],
         "pipeline-failuresExit.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
     }));
     const { result } = runHook(`/run-step X ${JSON.stringify({ taskNumber: 7, tasksFile: seeded.tasksFile })}`, configFile, undefined, seeded.priorPacketCommand);
@@ -1976,7 +1976,7 @@ test("test_runStepHook_checkpointsSourceLockHeldTrueMidWalkInsideTheLock", () =>
     const projectRoot = mkdtempSync(join(tmpdir(), "run-step-project-"));
     spawnSync("git", ["-C", projectRoot, "init", "-q"]);
     const configFile = configWith(writeStep => ({
-        "pipeline-lockSourceRepo.mmd": [{ box: "LOCK_SOURCE_REPO", script: writeStep("LOCK_SOURCE_REPO", { scriptSignal: "continue", worktree, runId: "r1", taskNumber: 7, projectRoot }), next: ["X"] }],
+        "pipeline-lockSourceRepo.mmd": [{ box: "LOCK_SOURCE_REPO", script: writeStep("LOCK_SOURCE_REPO", { scriptSignal: "continue", worktree, runId: "r1", taskNumber: 7, projectRoot }), takesSourceLock: true, next: ["X"] }],
         "x.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
     }));
     const startInput = JSON.stringify({ worktree, runId: "r1", taskNumber: 7, projectRoot });
@@ -1984,6 +1984,18 @@ test("test_runStepHook_checkpointsSourceLockHeldTrueMidWalkInsideTheLock", () =>
     const { checkpoint } = runHook(`/run-step pipeline-lockSourceRepo.mmd::LOCK_SOURCE_REPO ${startInput}`, configFile, worktree);
     assert.equal(checkpoint?.block, "x.mmd::X");
     assert.equal(checkpoint?.sourceLockHeld, true);
+});
+
+test("test_runStepHook_findsTheLockBlockByFlagEvenWhenNotNamedLockSourceRepo", () => {
+    const seeded = seedAnEndedRunReadyToStartAtABlock({ box: "W", scriptSignal: "continue" });
+    const configFile = configWith(writeStep => ({
+        [PREAMBLE_DIAGRAM]: [{ box: PREAMBLE_BOX, script: writeStep(PREAMBLE_BOX, { scriptSignal: "stop" }), next: [] }],
+        "pipeline-lockSourceRepo.mmd": [{ box: "TAKE_THE_LOCK", script: writeStep("TAKE_THE_LOCK", { scriptSignal: "continue" }), takesSourceLock: true, next: ["X"] }],
+        "x.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
+    }));
+    const { result } = runHook(`/run-step X ${JSON.stringify({ taskNumber: 7, tasksFile: seeded.tasksFile })}`, configFile, undefined, seeded.priorPacketCommand);
+    assert.deepEqual(result.ran, ["x.mmd::X"]);
+    assert.equal(readSourceRepoLock(seeded.projectRoot)?.owner, buildLockOwner("r1", 7));
 });
 
 function heldLockRepo(): { projectRoot: string } {

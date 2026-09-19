@@ -74,7 +74,7 @@ const BLOCK_OWNER_FOLDER: Record<string, string> = Object.fromEntries(
 
 // next holds bare box ids for same-diagram arrows and "other.mmd::BOX" when the arrow crosses into another diagram.
 export type AgentOptions = { model: string; effort: string; agentType?: string };
-export type StepConfigEntry = { box: string; script: string; template: string; producesPrompt: boolean; mutating?: boolean; nextBlock?: string; translator?: string; agent?: AgentOptions; next: string[] };
+export type StepConfigEntry = { box: string; script: string; template: string; producesPrompt: boolean; mutating?: boolean; takesSourceLock?: boolean; nextBlock?: string; translator?: string; agent?: AgentOptions; next: string[] };
 // Keyed by diagram file name; two diagrams naming the same box share its script but keep separate entries.
 export type StepConfig = Record<string, StepConfigEntry[] | string>;
 export type DiagramEdges = { boxes: string[]; next: Record<string, string[]> };
@@ -177,6 +177,21 @@ function getBlockFileTargets(diagram: string): Record<string, string> {
   return targets;
 }
 
+// "takesSourceLock:true" in a box's label marks the one block that holds the source-repo lock.
+function getBlockTakesSourceLockTargets(diagram: string): Record<string, boolean> {
+  const targets: Record<string, boolean> = {};
+  for (const line of diagram.split("\n")) {
+    const statement = line.split("%%")[0]!.trim();
+    const hasTakesSourceLockLabel = statement.includes("takesSourceLock:true");
+    if (!hasTakesSourceLockLabel) {
+      continue;
+    }
+    const box = statement.split(/[[({]/)[0]!.trim();
+    targets[box] = true;
+  }
+  return targets;
+}
+
 // "B_LOCK_SOURCE_REPO" -> "lockSourceRepo": strips the B_/Q_ prefix, camelCases the rest.
 function getBlockNameAsCamelCase(box: string): string {
   const withoutPrefix = box.replace(/^(B_|Q_)/, "");
@@ -208,6 +223,42 @@ function writeFileLineIntoDiagram(diagramFolder: string, diagramFile: string, bo
       continue;
     }
     updatedLines.push(line.replace(/"(\]|\}|\))\s*$/, `<br/>file:${filePath}"$1`));
+  }
+  writeFileSync(diagramPath, updatedLines.join("\n"));
+}
+
+// Inserts "<br/>takesSourceLock:true" before the closing quote of a box's own label line.
+function writeTakesSourceLockLineIntoDiagram(diagramFolder: string, diagramFile: string, box: string): void {
+  const diagramPath = join(diagramFolder, diagramFile);
+  const diagram = readFileSync(diagramPath, "utf8");
+  const updatedLines: string[] = [];
+  for (const line of diagram.split("\n")) {
+    const statement = line.split("%%")[0]!.trim();
+    const labelBox = statement.split(/[[({]/)[0]!.trim();
+    const isBoxLabelLine = labelBox === box;
+    if (!isBoxLabelLine) {
+      updatedLines.push(line);
+      continue;
+    }
+    updatedLines.push(line.replace(/"(\]|\}|\))\s*$/, `<br/>takesSourceLock:true"$1`));
+  }
+  writeFileSync(diagramPath, updatedLines.join("\n"));
+}
+
+// Removes "<br/>takesSourceLock:true" from a box's own label line, in place.
+function removeTakesSourceLockLineFromDiagram(diagramFolder: string, diagramFile: string, box: string): void {
+  const diagramPath = join(diagramFolder, diagramFile);
+  const diagram = readFileSync(diagramPath, "utf8");
+  const updatedLines: string[] = [];
+  for (const line of diagram.split("\n")) {
+    const statement = line.split("%%")[0]!.trim();
+    const labelBox = statement.split(/[[({]/)[0]!.trim();
+    const isBoxLabelLine = labelBox === box;
+    if (!isBoxLabelLine) {
+      updatedLines.push(line);
+      continue;
+    }
+    updatedLines.push(line.replace("<br/>takesSourceLock:true", ""));
   }
   writeFileSync(diagramPath, updatedLines.join("\n"));
 }
@@ -367,6 +418,25 @@ function getScriptFromPreviousConfig(configPath: string): Record<string, string>
   return scriptByStepKey;
 }
 
+// diagram-steps.json wins over the diagram label on disagreement, the same way it wins for the script path.  Every old entry gets a value here (true or false), so the box loop can tell "no old entry" from "old entry, off".
+function getTakesSourceLockFromPreviousConfig(configPath: string): Record<string, boolean> {
+  if (!existsSync(configPath)) {
+    return {};
+  }
+  const previousConfig = JSON.parse(readFileSync(configPath, "utf8")) as StepConfig;
+  const takesSourceLockByStepKey: Record<string, boolean> = {};
+  for (const [diagramFile, entries] of Object.entries(previousConfig)) {
+    const isStartValue = typeof entries === "string";
+    if (isStartValue) {
+      continue;
+    }
+    for (const entry of entries) {
+      takesSourceLockByStepKey[`${diagramFile}::${entry.box}`] = entry.takesSourceLock === true;
+    }
+  }
+  return takesSourceLockByStepKey;
+}
+
 // A leading underscore marks a spec diagram: it is drawn and served, but never generated from.
 function getDiagramFileNames(diagramFolder: string): string[] {
   const diagramFileNames: string[] = [];
@@ -400,7 +470,7 @@ export function resolveDiagramFolderSetting(projectRoot: string, fast: boolean =
   return { diagramFolder, stepsRoot: diagramFolder, allowStubs: false };
 }
 
-type ParsedDiagram = DiagramEdges & { promptBoxes: string[]; blockSignpostTargets: Record<string, string>; blockFileTargets: Record<string, string> };
+type ParsedDiagram = DiagramEdges & { promptBoxes: string[]; blockSignpostTargets: Record<string, string>; blockFileTargets: Record<string, string>; blockTakesSourceLockTargets: Record<string, boolean> };
 
 // Every diagram's boxes, edges, and prompt-marked boxes, parsed once up front.
 function parseDiagrams(diagramFolder: string): Map<string, ParsedDiagram> {
@@ -414,6 +484,7 @@ function parseDiagrams(diagramFolder: string): Map<string, ParsedDiagram> {
       promptBoxes: getPromptBoxesInDiagram(diagram),
       blockSignpostTargets: getBlockSignpostTargets(diagram),
       blockFileTargets: getBlockFileTargets(diagram),
+      blockTakesSourceLockTargets: getBlockTakesSourceLockTargets(diagram),
     });
   }
   return parsedByDiagramFile;
@@ -593,6 +664,7 @@ function getStartBlock(config: StepConfig): string {
 export function generateSteps(diagramFolder: string, stepsRoot: string, configPath: string, allowStubs: boolean = true): StepConfig {
   const mutatingByStepKey = getMutatingFromPreviousConfig(configPath);
   const scriptByStepKey = getScriptFromPreviousConfig(configPath);
+  const takesSourceLockByStepKey = getTakesSourceLockFromPreviousConfig(configPath);
   const parsedDiagrams = parseDiagrams(diagramFolder);
 
   // RETIRED (task 220): only assertNoOrphanBoxScripts read allBoxNames.
@@ -688,6 +760,26 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
         }
       }
       const mutating = mutatingByStepKey[`${diagramFile}::${box}`];
+      const takesSourceLockFromDiagram = data.blockTakesSourceLockTargets[box] === true;
+      const previousTakesSourceLock = takesSourceLockByStepKey[`${diagramFile}::${box}`];
+      const hasPreviousEntry = previousTakesSourceLock !== undefined;
+      let takesSourceLock: boolean;
+      if (hasPreviousEntry) {
+        takesSourceLock = previousTakesSourceLock;
+        if (takesSourceLock) {
+          if (!takesSourceLockFromDiagram) {
+            writeTakesSourceLockLineIntoDiagram(diagramFolder, diagramFile, box);
+          }
+        }
+        else {
+          if (takesSourceLockFromDiagram) {
+            removeTakesSourceLockLineFromDiagram(diagramFolder, diagramFile, box);
+          }
+        }
+      }
+      else {
+        takesSourceLock = takesSourceLockFromDiagram;
+      }
       const nextBlockOverride = diagramFolder === DEFAULT_DIAGRAM_FOLDER ? NEXT_BLOCK_OVERRIDES[`${diagramFile}::${box}`] : undefined;
       const fastNextBlockOverride = diagramFolder === FAST_DIAGRAM_FOLDER ? FAST_NEXT_BLOCK_OVERRIDES[`${diagramFile}::${box}`] : undefined;
       const translatorOverride = diagramFolder === DEFAULT_DIAGRAM_FOLDER ? TRANSLATOR_OVERRIDES[`${diagramFile}::${box}`] : undefined;
@@ -697,6 +789,7 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
         template: relative(PROJECT_ROOT, templatePath),
         producesPrompt,
         ...(mutating ? { mutating } : {}),
+        ...(takesSourceLock ? { takesSourceLock } : {}),
         ...(nextBlockOverride ? { nextBlock: nextBlockOverride } : {}),
         ...(fastNextBlockOverride ? { nextBlock: fastNextBlockOverride } : {}),
         ...(translatorOverride ? { translator: translatorOverride } : {}),

@@ -72,7 +72,8 @@ const STEP_TIMEOUT_MS = 1_860_000;
 // RETIRED (task 222): read off CONFIG.start once CONFIG is loaded, same pattern as CONFIG/STEPS_BY_KEY below.
 // const START_STEP_KEY = "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK";
 const FAILURES_EXIT_KEY = "pipeline-failuresExit.mmd::FAILURES_EXIT";
-const LOCK_SOURCE_REPO_BOX = "LOCK_SOURCE_REPO";
+// RETIRED (task 223): the lock block is found by the takesSourceLock flag, not this literal.
+// const LOCK_SOURCE_REPO_BOX = "LOCK_SOURCE_REPO";
 // Both exit tails release the source lock, so a block inside them starts without it.
 const EXIT_DIAGRAMS = ["pipeline-failuresExit.mmd", SUCCESS_DIAGRAM];
 
@@ -244,9 +245,22 @@ function getNextStepAfter(stoppedAt: string, output: Record<string, unknown>): s
   return getStepKey(String(chosenNextBox), step.diagram);
 }
 
+// The lock block is whichever step carries takesSourceLock: true; there is at most one.
+function getLockStepKey(): string | undefined {
+  for (const [stepKey, step] of STEPS_BY_KEY) {
+    const takesSourceLock = step.takesSourceLock === true;
+    if (takesSourceLock) {
+      return stepKey;
+    }
+  }
+  return undefined;
+}
+
 // A block holds the source lock when the walk can reach it from LOCK_SOURCE_REPO without entering an exit diagram.
 function isInsideSourceLock(stepKey: string): number {
-  const lockStepKey = getStepKeysNamingBox(LOCK_SOURCE_REPO_BOX)[0];
+  // RETIRED (task 223): named lookup replaced by the flag-based getLockStepKey.
+  // const lockStepKey = getStepKeysNamingBox(LOCK_SOURCE_REPO_BOX)[0];
+  const lockStepKey = getLockStepKey();
   if (lockStepKey === undefined)
     return SOURCE_LOCK_UNREACHABLE;
   const reached = new Set<string>();
