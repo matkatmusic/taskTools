@@ -476,3 +476,14 @@ test("test_generateSteps_pointsAnArrowIntoASignpostAtItsCrossDiagramTarget", () 
     });
     assert.deepEqual(config["one.mmd"]!.find(entry => entry.box === "A")!.next, ["two.mmd::TARGET"]);
 });
+
+test("test_generateSteps_readsAFileLineAsARepoRootRelativeScript", () => {
+    const { config, stepsRoot } = generateFrom({
+        "one.mmd": "flowchart TD\n    A --> B\n    A[\"A<br/>file:scripts/tackle-tasks/preambleStatusCheck/CREATE_WORKTREE.ts\"]\n",
+    });
+    const entry = config["one.mmd"]!.find(candidate => candidate.box === "A")!;
+    assert.equal(entry.script, "scripts/tackle-tasks/preambleStatusCheck/CREATE_WORKTREE.ts");
+    assert.equal(entry.template, "scripts/tackle-tasks/preambleStatusCheck/CREATE_WORKTREE.template.json");
+    assert.equal(existsSync(join(stepsRoot, "one/A.ts")), false);
+    assert.equal(existsSync(join(stepsRoot, "one/A.template.json")), false);
+});

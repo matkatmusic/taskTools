@@ -161,6 +161,22 @@ function getBlockSignpostTargets(diagram: string): Record<string, string> {
   return targets;
 }
 
+// "file:<path>" in a box's label names the repo-root-relative script it runs.
+function getBlockFileTargets(diagram: string): Record<string, string> {
+  const targets: Record<string, string> = {};
+  for (const line of diagram.split("\n")) {
+    const statement = line.split("%%")[0]!.trim();
+    const fileMatch = statement.match(/file:([^<"]+)/);
+    const hasFileLabel = fileMatch !== null;
+    if (!hasFileLabel) {
+      continue;
+    }
+    const box = statement.split(/[[({]/)[0]!.trim();
+    targets[box] = fileMatch[1]!;
+  }
+  return targets;
+}
+
 function buildStubScript(box: string, diagramFile: string, producesPrompt: boolean): string {
   const resultLine = producesPrompt
     ? `return { box: "${box}", scriptSignal: SCRIPT_SIGNAL.PROMPT, prompt: \`stub prompt from \${basename(fileURLToPath(import.meta.url))}\` };`
@@ -274,7 +290,7 @@ export function resolveDiagramFolderSetting(projectRoot: string, fast: boolean =
   return { diagramFolder, stepsRoot: diagramFolder, allowStubs: false };
 }
 
-type ParsedDiagram = DiagramEdges & { promptBoxes: string[]; blockSignpostTargets: Record<string, string> };
+type ParsedDiagram = DiagramEdges & { promptBoxes: string[]; blockSignpostTargets: Record<string, string>; blockFileTargets: Record<string, string> };
 
 // Every diagram's boxes, edges, and prompt-marked boxes, parsed once up front.
 function parseDiagrams(diagramFolder: string): Map<string, ParsedDiagram> {
@@ -282,7 +298,13 @@ function parseDiagrams(diagramFolder: string): Map<string, ParsedDiagram> {
   for (const diagramFile of getDiagramFileNames(diagramFolder)) {
     const diagram = readFileSync(join(diagramFolder, diagramFile), "utf8");
     const { boxes, next } = getEdgesInDiagram(diagram);
-    parsedByDiagramFile.set(diagramFile, { boxes, next, promptBoxes: getPromptBoxesInDiagram(diagram), blockSignpostTargets: getBlockSignpostTargets(diagram) });
+    parsedByDiagramFile.set(diagramFile, {
+      boxes,
+      next,
+      promptBoxes: getPromptBoxesInDiagram(diagram),
+      blockSignpostTargets: getBlockSignpostTargets(diagram),
+      blockFileTargets: getBlockFileTargets(diagram),
+    });
   }
   return parsedByDiagramFile;
 }
@@ -436,10 +458,18 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
       }
       const ownerFolder = getOwnerFolder(box);
       const stepsDirectory = join(stepsRoot, ownerFolder);
-      mkdirSync(stepsDirectory, { recursive: true });
+      const fileTarget = data.blockFileTargets[box];
+      const hasFileTarget = fileTarget !== undefined;
+      if (!hasFileTarget) {
+        mkdirSync(stepsDirectory, { recursive: true });
+      }
       const producesPrompt = data.promptBoxes.includes(box);
-      const scriptPath = join(stepsDirectory, `${box}.ts`);
-      const templatePath = join(stepsDirectory, `${box}.template.json`);
+      let scriptPath = join(stepsDirectory, `${box}.ts`);
+      let templatePath = join(stepsDirectory, `${box}.template.json`);
+      if (hasFileTarget) {
+        scriptPath = join(PROJECT_ROOT, fileTarget);
+        templatePath = join(PROJECT_ROOT, fileTarget.replace(/\.ts$/, ".template.json"));
+      }
       // An existing file is the author's, so only a missing one gets written.
       if (!existsSync(scriptPath)) {
         if (!allowStubs) {
