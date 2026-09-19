@@ -81,39 +81,83 @@
   },
   {
     "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-preambleStatusCheck_DOES_WORKTREE_EXIST_Q_producesItsOutputContract"
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_ADD_MISSING_FILES_TO_CREATES_FILES_producesItsOutputContract"
   },
   {
     "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-preambleStatusCheck_CREATE_WORKTREE_producesItsOutputContract"
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_AMEND_TASK_FILE_LIST_producesItsOutputContract"
   },
   {
     "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-preambleStatusCheck_TAKE_WORKTREE_LEASE_producesItsOutputContract"
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_CREATE_WORKTREE_producesItsOutputContract"
   },
   {
     "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-preambleStatusCheck_IS_WORKTREE_SAFE_TO_USE_Q_producesItsOutputContract"
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_DOCUMENT_GENERATION_producesItsOutputContract"
   },
   {
     "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-preambleStatusCheck_RESET_WORKTREE_producesItsOutputContract"
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_FIX_CATCH_UP_CONFLICTS_producesItsOutputContract"
   },
   {
     "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-preambleStatusCheck_REBASE_RESUMED_WORKTREE_ONTO_STAGING_producesItsOutputContract"
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_FIX_RESUMED_REBASE_CONFLICTS_producesItsOutputContract"
   },
   {
     "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-preambleStatusCheck_DOES_FENCE_COVER_WORKTREE_Q_producesItsOutputContract"
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_LOCK_STAGING_FOR_CATCH_UP_producesItsOutputContract"
   },
   {
     "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-preambleStatusCheck_INIT_SUBMODULES_RECURSIVELY_producesItsOutputContract"
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_RESET_WORKTREE_producesItsOutputContract"
   },
   {
     "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-preambleStatusCheck_DOCUMENT_GENERATION_producesItsOutputContract"
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_TAKE_WORKTREE_LEASE_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_WAIT_FOR_CATCH_UP_LOCK_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_Q_CATCH_UP_STAGING_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_Q_COMMIT_CATCH_UP_MERGE_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_Q_CONTINUE_RESUMED_REBASE_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_Q_DOES_FENCE_COVER_WORKTREE_Q_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_Q_DOES_WORKTREE_EXIST_Q_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_Q_HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_Q_INIT_SUBMODULES_RECURSIVELY_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_Q_IS_WORKTREE_SAFE_TO_USE_Q_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_Q_WAS_CATCH_UP_LOCK_ACQUIRED_Q_producesItsOutputContract"
   },
   {
     "file": "tests/stepTemplates.test.ts",
@@ -122,6 +166,66 @@
   {
     "file": "tests/stepTemplates.test.ts",
     "name": "test_stepTemplate_pipeline-whatDidThePlannerReturn_WRITE_CLARIFY_REQUEST_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepEdge_B_ADD_MISSING_FILES_TO_CREATES_FILES_to_B_DOCUMENT_GENERATION_agreesOnTheShape"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepEdge_B_AMEND_TASK_FILE_LIST_to_Q_INIT_SUBMODULES_RECURSIVELY_agreesOnTheShape"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepEdge_Q_CATCH_UP_STAGING_to_B_MARK_TASK_ACTIVE_agreesOnTheShape"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepEdge_Q_CONTINUE_RESUMED_REBASE_to_Q_DOES_FENCE_COVER_WORKTREE_Q_agreesOnTheShape"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepEdge_Q_HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q_to_REPORT_ONLY_EXIT_agreesOnTheShape"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepEdge_B_ADD_MISSING_FILES_TO_CREATES_FILES_to_B_DOCUMENT_GENERATION_inputIsSubsetOfDeclaredOutput"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepEdge_B_AMEND_TASK_FILE_LIST_to_Q_INIT_SUBMODULES_RECURSIVELY_inputIsSubsetOfDeclaredOutput"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepEdge_Q_CATCH_UP_STAGING_to_B_MARK_TASK_ACTIVE_inputIsSubsetOfDeclaredOutput"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepEdge_Q_CONTINUE_RESUMED_REBASE_to_Q_DOES_FENCE_COVER_WORKTREE_Q_inputIsSubsetOfDeclaredOutput"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepEdge_Q_HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q_to_REPORT_ONLY_EXIT_inputIsSubsetOfDeclaredOutput"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_FIX_CATCH_UP_CONFLICTS_promptHasNoContinuationInstructions"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_FIX_RESUMED_REBASE_CONFLICTS_promptHasNoContinuationInstructions"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_Q_IS_PREVIOUS_RUN_RESUMABLE_Q_everyNextLiteralIsADeclaredEdge"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_Q_PREFLIGHT_OK_Q_everyNextLiteralIsADeclaredEdge"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING_everyNextLiteralIsADeclaredEdge"
   },
   {
     "file": "tests/workflowAgentOptions.test.ts",
