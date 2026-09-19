@@ -1664,5 +1664,46 @@
         "reason": "chain order: [launch 6] comes before [launch 7]"
       }
     ]
+  },
+  {
+    "taskNumber": 247,
+    "version": "a65f1c060c9f9942ccb0536f1a97cfa67be01151",
+    "title": "[launch 8] catchUpStaging.ts catches up staging in the main repository and every submodule, deepest first",
+    "userDescription": "8. `scripts/shared/catchUpStaging.ts` does the catch-up for the main repository and every submodule, and removes its merge worktree.\n    WHY: a task can own files in a submodule, and each submodule has its own `staging`. The catch-up code stays out of `prepareTasks.ts`.\n    HOW: it walks the submodules deepest first, then the root, like `resolveOrCreateStagingTipEverywhere` (`prepareTasks.ts:284-303`). It calls the module of step 7 with a merge worktree named `task-N-catchUpMerge`. Clean merge: it moves `staging`, then runs `git worktree remove --force` and `git worktree prune`. Conflict: it returns the repository, the worktree path, and the conflicted files, and it leaves the worktree in place for the agent. Tests: staging behind, staging diverged and clean, staging diverged with a conflict. Each clean case checks that the merge worktree is gone.\n\nUser ruling (2026-09-18): follows the ruling on [launch 7] — scripts/shared/mergeHelpers.ts returns a conflict signal only, with no file list, since git already shows the conflicted paths directly. catchUpStaging.ts therefore has no conflicted-files list to return: on a conflict it returns the repository and the worktree path only, not \"the repository, the worktree path, and the conflicted files\" as the spec text above literally says. It calls the [launch 7] module with a merge worktree path named `task-N-catchUpMerge` (N = the task number passed in), not that module's own mkdtempSync path.",
+    "chainGoal": [
+      "The [launch 1] to [launch 22] chain makes a tackle-tasks launch reach the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet, per specs/launch-reaches-planning-alone.md."
+    ],
+    "goal": [
+      "- catchUpStaging.ts walks every submodule deepest first, then the root, the same order resolveOrCreateStagingTipEverywhere already uses.",
+      "- Each repository's merge worktree, when one is created, is named task-N-catchUpMerge (N = the task number passed in), not a random temp path.",
+      "- A repository whose diverged merge is clean moves staging to the merged tip, then its merge worktree is gone from `git worktree list`.",
+      "- A repository whose diverged merge conflicts stops the walk and returns the repository path and the worktree path only, with no conflicted-files list, and the merge worktree still exists on disk afterward.",
+      "- Three new tests cover: staging behind, staging diverged and clean, staging diverged with a conflict; the clean-case test asserts the merge worktree is gone."
+    ],
+    "notInScope": [
+      "- scripts/shared/mergeHelpers.ts and its own clean-tip/conflict-signal contract are [launch 7]; this task only calls it.",
+      "- The CATCH_UP_STAGING block, the source-repo-lock wait loop around it, and FIX_CATCH_UP_CONFLICTS's prompt are [launch 9], [launch 10], and [launch 11].",
+      "- Committing a fixed catch-up merge (COMMIT_CATCH_UP_MERGE) is [launch 12]."
+    ],
+    "problemSolvedByTask": "A task can own files inside a submodule, and each submodule keeps its own staging branch, so the catch-up has to move staging in every repository, not just the root. Keeping that walk out of prepareTasks.ts keeps the catch-up code in one place the preamble can call.",
+    "description": "catchUpStaging.ts is a new file that walks every submodule deepest first, then the root, the same ordering resolveOrCreateStagingTipEverywhere already uses via a recursive submodule listing. For each repository it calls the [launch 7] module, scripts/shared/mergeHelpers.ts, with a merge worktree path named task-N-catchUpMerge, built the way other per-task worktree paths are already built, instead of that module's own mkdtempSync path. A clean result moves the repository's staging branch to the merged tip, then runs git worktree remove --force and git worktree prune, so no merge worktree is left behind. A conflicting result stops the whole walk and returns the repository path and the worktree path only, per the [launch 7] ruling that no conflicted-files list exists to pass; the merge worktree stays on disk so the fixing agent can run git in it directly. The not-found, exact-match, fast-forward, and already-ahead branches that stay inside resolveOrCreateStagingTip still apply per repository before any merge worktree is created, so most repositories in a walk create no merge worktree at all. Three new tests build a root repository with one submodule, using the existing git-fixture and repo-shape test helpers the spawnStaging matrix already uses, and drive the three named states.",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "createsFiles": [
+      "scripts/shared/catchUpStaging.ts",
+      "tests/catchUpStaging.test.ts"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "New file tests/catchUpStaging.test.ts, built on tests/support/gitFixtures.ts and repoShapeFixtures.ts the way tests/spawnStaging/*.test.ts are. Test 1, test_catchUpStaging_movesStagingWithNoMergeWorktreeWhenStagingIsBehind: build a root repository with one submodule where staging is behind main by one commit in both (a behind-head shape). Call catchUpStaging(repoRoot, taskNumber). Expected result: `git -C <repo> rev-parse staging` equals `git -C <repo> rev-parse main` for both the root and the submodule, and `git -C <repo> worktree list` lists no task-<N>-catchUpMerge entry for either repository. Test 2, test_catchUpStaging_removesTheMergeWorktreeAfterACleanDivergedMerge: build a root repository with one submodule where each repository's staging and main both hold one new, non-conflicting commit (a diverged, clean shape). Call catchUpStaging(repoRoot, taskNumber). Expected result: `git -C <repo> rev-parse staging` is a merge commit whose two parents are the prior staging tip and the HEAD tip, for both repositories, and `git -C <repo> worktree list` lists no task-<N>-catchUpMerge entry for either repository afterward. Test 3, test_catchUpStaging_leavesTheWorktreeAndReturnsOnlyTheRepositoryAndPathOnAConflict: build a root repository with no submodule where staging and main both change the same line of the same file. Call catchUpStaging(repoRoot, taskNumber). Expected result: the return value's repository and worktreePath fields match the root repository and its task-<N>-catchUpMerge path, and the return value has no conflicted-files field at all; `git -C <the returned worktreePath> status --porcelain` still lists the conflicted file with a `U` prefix, proving the merge worktree was left in place.",
+    "difficulty": 6,
+    "blockedBy": [
+      {
+        "taskNumber": 246,
+        "reason": "chain order: [launch 7] comes before [launch 8]"
+      }
+    ]
   }
 ]
