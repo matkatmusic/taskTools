@@ -1582,5 +1582,43 @@
         "reason": "chain order: [launch 4] comes before [launch 5]"
       }
     ]
+  },
+  {
+    "taskNumber": 245,
+    "version": "b4046ba9577bce80c2f5a65a3a0f1004b1e9b20d",
+    "title": "[launch 6] A block that throws before a task worktree exists leaves the source-repo lock free",
+    "userDescription": "6. A block that throws before a task worktree exists leaves the source-repo lock free.\n    WHY: `buildFailure` returns early at `scripts/tackle-tasks/runStepHook.ts:282-285`. A throw in a catch-up block then holds the source-repo lock forever, and every later launch waits.\n    HOW: release the lock inside `buildFailure` before the early return. One test: a block throws with the lock held, and the lock is free after.\n\nUser ruling (2026-09-18): the correct file is `scripts/hooks/runStepHook.ts` (`scripts/tackle-tasks/runStepHook.ts` does not exist). `buildFailure` spans lines 268-319; the early return to fix is the worktree-missing check, `if (!worktreeExists) return ...`, currently at lines 284-285. The file imports only `buildLockOwner` and `readSourceRepoLock` from `scripts/tackle-tasks/shared/sourceRepoLock.ts` today; add `releaseSourceRepoLock` to that import and call `releaseSourceRepoLock(String(context.packet.projectRoot), buildLockOwner(String(context.packet.runId), Number(context.packet.taskNumber)))` before that return. `releaseSourceRepoLock` (`sourceRepoLock.ts:246-258`) already no-ops when this run does not own the lock. Not in scope: the `context === null` early return (no packet to build an owner from) and the `EXIT_DIAGRAMS` early return (already releases the lock through the failures-exit or merge-succeeded tail's own lock-release block).",
+    "chainGoal": [
+      "The [launch 1] to [launch 22] chain makes a tackle-tasks launch reach the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet, per specs/launch-reaches-planning-alone.md."
+    ],
+    "goal": [
+      "- `releaseSourceRepoLock`, with an owner built from the packet's projectRoot, runId, and taskNumber, is called before buildFailure's worktree-missing early return in scripts/hooks/runStepHook.ts.",
+      "- A new test proves a block that throws before its packet's worktree path exists on disk, while the source-repo lock is held by that run, leaves the lock file absent afterward.",
+      "- buildFailure's `context === null` early return and its `EXIT_DIAGRAMS` early return are unchanged: neither one gains a `releaseSourceRepoLock` call.",
+      "- `node --test tests/runStepHook.test.ts` passes."
+    ],
+    "notInScope": [
+      "- The other two early returns inside buildFailure (no packet context, and a block already inside an exit-tail diagram) are unchanged; this task does not touch them.",
+      "- Any change to how or when a block acquires or refreshes the source-repo lock is out of scope; this task only adds a release on one existing early-return path."
+    ],
+    "problemSolvedByTask": "buildFailure returns early, before checkpointing, whenever the packet's worktree does not exist on disk yet. A throw inside a catch-up block hits exactly that early return, so the source-repo lock it holds is never released, and every later launch waits behind it forever.",
+    "description": "buildFailure in scripts/hooks/runStepHook.ts builds the failure report for a run-step walk and, once a step has reached far enough to have a worktree, checkpoints the block as failed and walks the failures-exit tail. Before checkpointing, it currently returns early whenever the packet names a worktree path that does not yet exist on disk, and that early return never touches the source-repo lock. A catch-up block that throws before its task worktree has been created hits exactly that path, so a lock taken earlier in the walk stays held with no owner left to release it. The fix adds one call to releaseSourceRepoLock, built from the packet's projectRoot, runId, and taskNumber the same way the file's other lock checks already build an owner, placed right before that early return. releaseSourceRepoLock already no-ops when the calling run does not own the lock, so the call is safe even on a walk that never took one. The file's other two early returns inside buildFailure, for a packet with no context and for a block already inside an exit-tail diagram, are unaffected: the first has no packet to build an owner from, and the second already releases the lock through that tail's own lock-release block.",
+    "modifiableFiles": [
+      "scripts/hooks/runStepHook.ts",
+      "tests/runStepHook.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "New test in tests/runStepHook.test.ts, test_runStepHook_releasesTheSourceLockWhenABlockThrowsBeforeItsWorktreeExists: acquire the source-repo lock (acquireSourceRepoLock, the same setup this file's heldLockRepo helper uses) in a fresh, git-initialized temp projectRoot, for owner buildLockOwner(\"r1\", 7). Build a one-block config in a diagram \"one.mmd\" whose box \"A\" throws (a script file whose entire content is `throw new Error('boom');`). Run the hook with `/run-step A <startInput>` where startInput is `{ taskNumber: 7, runId: \"r1\", projectRoot, worktree: join(projectRoot, \"not-created-yet\") }` — a worktree path that does not exist on disk. Before the call, assert `readSourceRepoLock(projectRoot)?.owner` equals `buildLockOwner(\"r1\", 7)`, to prove the lock really was held. After the call, assert `result.ok` is `false` and `readSourceRepoLock(projectRoot)` is `null`.",
+    "difficulty": 4,
+    "blockedBy": [
+      {
+        "taskNumber": 244,
+        "reason": "chain order: [launch 5] comes before [launch 6]"
+      }
+    ]
   }
 ]
