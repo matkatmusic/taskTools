@@ -508,8 +508,13 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
     }
 
     const scriptSignal = stepRun.result.scriptSignal as ScriptSignal;
-    if (!KNOWN_SCRIPT_SIGNALS.includes(scriptSignal)) {
-      const knownList = KNOWN_SCRIPT_SIGNALS.map(known => JSON.stringify(known)).join(", ");
+    const isKnownScriptSignal = KNOWN_SCRIPT_SIGNALS.includes(scriptSignal);
+    if (!isKnownScriptSignal) {
+      const knownSignalTexts: string[] = [];
+      for (const known of KNOWN_SCRIPT_SIGNALS) {
+        knownSignalTexts.push(JSON.stringify(known));
+      }
+      const knownList = knownSignalTexts.join(", ");
       return buildFailure(boxesRun, [`${stepKey} scriptSignal must be one of ${knownList}, not ${JSON.stringify(stepRun.result.scriptSignal)}`], { step, packet, input, startedFromPacketFile });
     }
     // The diagram's returns_a_prompt mark and the printed scriptSignal must agree, both ways.
