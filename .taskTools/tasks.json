@@ -1941,5 +1941,51 @@
         "reason": "chain order: [launch 12] comes before [launch 13]"
       }
     ]
+  },
+  {
+    "taskNumber": 253,
+    "version": "8f95a2fc9604528e0bee0af331348af6785ab316",
+    "title": "[launch 14] Fill in FIX_RESUMED_REBASE_CONFLICTS to prompt an agent for a resumed-worktree rebase conflict",
+    "userDescription": "14. The `FIX_RESUMED_REBASE_CONFLICTS` block returns a prompt, and a subagent fixes the conflicted files in the resumed worktree.\n    WHY: an earlier run left the worktree, and another task moved `staging` since then. The rebase onto the new `staging` can have a conflict. Today that goes to the 2-try stop.\n    HOW: fill in the stub. Reuse as much code as possible from the scripts of the later block that fixes merge conflicts (`FIX_CONFLICTS.ts` and `fixConflictsPrompt`). `REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts:68-77` sends NO to this block, not to `ARE_2_CONFLICT_FIXES_DONE_Q`. It keeps the source-repo lock.\n\nUser ruling (2026-09-18): FIX_CONFLICTS.ts calls refreshOwnedSourceRepoLockOrThrow before it writes the prompt, the guard every tail-script box calls before doing any work. FIX_RESUMED_REBASE_CONFLICTS runs while the lock is held, reached only on the keep-the-lock branches, and can take many minutes, so it must make the same call. \"Only the worktree path differs\" from FIX_CONFLICTS.ts's reuse, since FIX_RESUMED_REBASE_CONFLICTS also has no file list to pass; the fixing agent runs git in the worktree to see the conflicts.",
+    "chainGoal": [
+      "A tackle-tasks launch reaches the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet. The chain is [launch 1] to [launch 22] from specs/launch-reaches-planning-alone.md."
+    ],
+    "goal": [
+      "- `rg -n \"ARE_2_CONFLICT_FIXES_DONE_Q\" scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts` finds nothing.",
+      "- `node --test scripts/tackle-tasks/preambleStatusCheck/FIX_RESUMED_REBASE_CONFLICTS.test.ts scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.test.ts` passes.",
+      "- Running B_FIX_RESUMED_REBASE_CONFLICTS against a real conflict-marked file returns a scriptSignal of \"prompt\" and writes a real prompt file to disk, instead of the stub's throw.",
+      "- The source-repo lock stays held (readSourceRepoLock still names this run's owner) after B_FIX_RESUMED_REBASE_CONFLICTS runs."
+    ],
+    "notInScope": [
+      "- [launch 15]'s CONTINUE_RESUMED_REBASE stub is out of scope; this task only produces the prompt, never drives the rebase forward.",
+      "- [launch 13]'s split of IS_PREVIOUS_RUN_RESUMABLE_Q into Q_RESUME_PREVIOUS_RUN_IF_POSSIBLE and Q_PREVIOUS_RUN_LEFT_NOTES is out of scope.",
+      "- The 2-try stop at ARE_2_CONFLICT_FIXES_DONE_Q for the rebase that runs after implementation is untouched, per the spec's own scope note; only the resumed-worktree rebase's routing changes.",
+      "- [launch 18]'s tests/tackleTasksAcceptance.test.ts walk additions are out of scope."
+    ],
+    "problemSolvedByTask": "An earlier run can leave a task worktree behind, and by the time it resumes, another task has moved staging further. Rebasing the resumed worktree onto the new staging can hit a real conflict, and today that conflict routes into the 2-try stop meant for the later merge-time rebase, instead of being handed to an agent to fix.",
+    "description": "FIX_RESUMED_REBASE_CONFLICTS.ts already exists as a generator-written stub that throws, at scripts/tackle-tasks/preambleStatusCheck/FIX_RESUMED_REBASE_CONFLICTS.ts, because an earlier chain task installs plans/preamble-revised.mmd as the live preamble and stubs every new block it draws. This task fills that stub in by reusing FIX_CONFLICTS.ts and fixConflictsPrompt (scripts/tackle-tasks/shared/FixConflictsBodyEmitter.ts) almost unchanged: refresh the source-repo lock this run already owns, write the same conflict-resolution prompt to a file under the worktree's plans/ folder, and return a scriptSignal of \"prompt\" pointing the agent at it. The one real difference from FIX_CONFLICTS.ts is which checkout the prompt targets: a resumed-worktree rebase can stop inside a submodule, so the conflicted-files lookup should run against packet.stoppedCheckoutPath, the value REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts already records, not packet.worktree. REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts's conflict branch currently routes to pipeline-commitMergeConflictFixIfNeeded.mmd::ARE_2_CONFLICT_FIXES_DONE_Q; this task repoints it at B_FIX_RESUMED_REBASE_CONFLICTS in the same diagram and keeps the source-repo lock held across that jump, matching both the spec and the diagram's own annotation on that edge. FIX_RESUMED_REBASE_CONFLICTS can reuse the RebaseResumedPacket type REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts already exports, extended with the agent-answer fields (message, additionalData) every returns_a_prompt block's answer carries. The existing preambleStatusCheck/fixtures/setup.sh only builds a tasks.json fixture today, so exercising a real conflict-marked file likely means extending it with a git checkout stopped mid-rebase, mirroring whatever fixture an earlier chain task adds for the equivalent commitMergeConflictFixIfNeeded blocks.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/preambleStatusCheck/FIX_RESUMED_REBASE_CONFLICTS.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/FIX_RESUMED_REBASE_CONFLICTS.template.json",
+      "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.test.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/fixtures/setup.sh"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "createsFiles": [
+      "scripts/tackle-tasks/preambleStatusCheck/FIX_RESUMED_REBASE_CONFLICTS.test.ts"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "New test scripts/tackle-tasks/preambleStatusCheck/FIX_RESUMED_REBASE_CONFLICTS.test.ts, mirroring scripts/tackle-tasks/fixConflicts/FIX_CONFLICTS.test.ts: test_B_FIX_RESUMED_REBASE_CONFLICTS_writesThePromptFileAndReturnsAPromptSignal -- build a fixture checkout with one file, conflict.txt, holding real <<<<<<< / ======= / >>>>>>> markers; call main() with a packet whose stoppedCheckoutPath points at that checkout, worktree points at its parent task worktree, and projectRoot/runId/taskNumber name a source-repo lock this run already owns; assert the return equals { ...packet, box: \"B_FIX_RESUMED_REBASE_CONFLICTS\", scriptSignal: \"prompt\", prompt: \"invoke '/read-file \\\"<worktree>/plans/FIX_RESUMED_REBASE_CONFLICTS.prompt.md\\\"' and follow the instructions.\" }, and assert the written prompt file starts with \"## YOUR JOB\" and lists \"<stoppedCheckoutPath>/conflict.txt\" under \"## WHAT YOU MAY EDIT\". test_B_FIX_RESUMED_REBASE_CONFLICTS_throwsWhenThisRunDoesNotOwnTheLock -- call main() with a packet naming a runId that does not own the current source-repo lock file; assert it throws. Update scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.test.ts: change every assertion that reads assert.equal(output.next, \"pipeline-commitMergeConflictFixIfNeeded.mmd::ARE_2_CONFLICT_FIXES_DONE_Q\") to assert.equal(output.next, \"B_FIX_RESUMED_REBASE_CONFLICTS\").",
+    "difficulty": 5,
+    "blockedBy": [
+      {
+        "taskNumber": 252,
+        "reason": "chain order: [launch 13] comes before [launch 14]"
+      }
+    ]
   }
 ]
