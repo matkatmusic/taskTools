@@ -568,8 +568,12 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
         continue;
       }
       // A dashed box only points into another diagram; that diagram holds the step.
-      if (data.next[box]!.length === 0 && getDiagramWhereBoxHasArrows(box, parsedDiagrams, diagramFile) !== undefined) {
-        continue;
+      const hasNoNextTargets = data.next[box]!.length === 0;
+      if (hasNoNextTargets) {
+        const boxIsDrawnInAnotherDiagram = getDiagramWhereBoxHasArrows(box, parsedDiagrams, diagramFile) !== undefined;
+        if (boxIsDrawnInAnotherDiagram) {
+          continue;
+        }
       }
       const ownerFolder = getOwnerFolder(box);
       const stepsDirectory = join(stepsRoot, ownerFolder);
