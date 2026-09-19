@@ -43,15 +43,35 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     const diagramFolderSetting = resolveDiagramFolderSetting(repoRoot);
     generateSteps(diagramFolderSetting.diagramFolder, diagramFolderSetting.stepsRoot, stepsConfigPath, diagramFolderSetting.allowStubs);
   }
-  const stepsByDiagram: Record<string, { box: string; script: string; next: string[] }[]> = JSON.parse(readFileSync(stepsConfigPath, "utf-8"));
-  const stepKeysNamingBlock = Object.entries(stepsByDiagram).flatMap(([diagram, entries]) => entries.filter((entry) => entry.box === block).map(() => `${diagram}::${block}`));
+  const stepsByDiagram: Record<string, { box: string; script: string; next: string[] }[] | string> = JSON.parse(readFileSync(stepsConfigPath, "utf-8"));
+  const stepKeysNamingBlock: string[] = [];
+  for (const [diagram, entries] of Object.entries(stepsByDiagram)) {
+    const isStartValue = typeof entries === "string";
+    if (isStartValue) {
+      continue;
+    }
+    for (const entry of entries) {
+      if (entry.box === block) {
+        stepKeysNamingBlock.push(`${diagram}::${block}`);
+      }
+    }
+  }
   if (block !== "" && stepKeysNamingBlock.length !== 1) {
     throw new Error(`block ${block} names ${stepKeysNamingBlock.length} steps in steps.json: ${stepKeysNamingBlock.join(", ")}`);
   }
   const stepKey = stepKeysNamingBlock[0] ?? "";
 
   // Same walk as runStepHook.ts isInsideSourceLock: reachable from LOCK_SOURCE_REPO without entering an exit diagram.
-  const stepsByKey = new Map<string, { next: string[]; diagram: string }>(Object.entries(stepsByDiagram).flatMap(([diagram, entries]) => entries.map((entry) => [`${diagram}::${entry.box}`, { ...entry, diagram }])));
+  const stepsByKey = new Map<string, { next: string[]; diagram: string }>();
+  for (const [diagram, entries] of Object.entries(stepsByDiagram)) {
+    const isStartValue = typeof entries === "string";
+    if (isStartValue) {
+      continue;
+    }
+    for (const entry of entries) {
+      stepsByKey.set(`${diagram}::${entry.box}`, { ...entry, diagram });
+    }
+  }
   const getStepKey = (boxReference: string, fromDiagram: string): string => {
     if (boxReference.includes("::"))
       return boxReference;
@@ -77,8 +97,19 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
 
   let scope: ResetScope = {};
   if (block !== "") {
-    const script = Object.values(stepsByDiagram).flat().find((entry) => entry.box === block)!.script;
-    const blockModule = await import(pathToFileURL(join(fileURLToPath(new URL("../..", import.meta.url)), script)).href);
+    let script: string | undefined;
+    for (const entries of Object.values(stepsByDiagram)) {
+      const isStartValue = typeof entries === "string";
+      if (isStartValue) {
+        continue;
+      }
+      for (const entry of entries) {
+        if (entry.box === block) {
+          script = entry.script;
+        }
+      }
+    }
+    const blockModule = await import(pathToFileURL(join(fileURLToPath(new URL("../..", import.meta.url)), script!)).href);
     scope = blockModule.resetScope ?? {};
   }
 

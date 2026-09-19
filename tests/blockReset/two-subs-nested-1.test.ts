@@ -35,7 +35,10 @@ test("test_resetTask_atEveryBlock_twoSubmodulesNested_restoresRootAndEverySubmod
         const setting = resolveDiagramFolderSetting(repoRoot);
         const stepsByDiagram = generateSteps(setting.diagramFolder, setting.stepsRoot, stepsConfigPath, setting.allowStubs);
         const boxCounts = new Map<string, number>();
-        for (const entry of Object.values(stepsByDiagram).flat()) boxCounts.set(entry.box, (boxCounts.get(entry.box) ?? 0) + 1);
+        for (const entry of Object.values(stepsByDiagram).flat()) {
+            if (typeof entry === "string") continue;
+            boxCounts.set(entry.box, (boxCounts.get(entry.box) ?? 0) + 1);
+        }
         const blocks = [...boxCounts].filter(([, count]) => count === 1).map(([box]) => box);
         assert.ok(blocks.length > 10);
 

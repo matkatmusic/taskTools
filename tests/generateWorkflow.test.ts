@@ -4,7 +4,7 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { AgentOptions, StepConfig, StepConfigEntry } from "../scripts/tackle-tasks/generateSteps.ts";
-import { assertStartStepIsInConfig, buildWorkflowScript, generateWorkflow, START_STEP } from "../scripts/tackle-tasks/generateWorkflow.ts";
+import { assertStartStepIsInConfig, buildWorkflowScript, generateWorkflow } from "../scripts/tackle-tasks/generateWorkflow.ts";
 import { buildHookOutputSchema } from "../scripts/tackle-tasks/buildRunStepSchemas.ts";
 import { runWorkflowScript } from "./helpers/runWorkflowScript.ts";
 
@@ -24,8 +24,15 @@ function buildProject(blocks: { box: string; output: Record<string, unknown>; pr
             next: block.next ?? [],
         };
         if (block.agent !== undefined) entry.agent = block.agent;
-        config[diagram] = config[diagram] ?? [];
-        config[diagram]!.push(entry);
+        const diagramEntries = (config[diagram] as StepConfigEntry[] | undefined) ?? [];
+        config[diagram] = diagramEntries;
+        diagramEntries.push(entry);
+    }
+    // A fixture's own start block, for buildWorkflowScript's own config.start lookup: the first block, first diagram.
+    const firstDiagram = Object.keys(config)[0];
+    if (firstDiagram !== undefined) {
+        const firstDiagramEntries = config[firstDiagram] as StepConfigEntry[];
+        config.start = `${firstDiagram}::${firstDiagramEntries[0]!.box}`;
     }
     const configFile = join(projectRoot, "steps.json");
     writeFileSync(configFile, JSON.stringify(config));
@@ -235,11 +242,11 @@ test("test_generateWorkflow_leavesNoTemporaryFileBehind", () => {
 //     assert.equal(readFileSync(WORKFLOW_FILE, "utf8"), buildWorkflowScript());
 // });
 
-// START_STEP is a constant in this file; the config is the only thing that can drift away from it.
-test("test_START_STEP_isAKeyInTheRepoConfig", () => {
-    const config = JSON.parse(readFileSync(join(import.meta.dirname, "..", "scripts", "tackle-tasks", "diagram-steps.json"), "utf8")) as StepConfig;
-    assert.doesNotThrow(() => assertStartStepIsInConfig(config, START_STEP));
-});
+// RETIRED (task 222): START_STEP no longer exists as a separate constant to drift from the config.
+// test("test_START_STEP_isAKeyInTheRepoConfig", () => {
+//     const config = JSON.parse(readFileSync(join(import.meta.dirname, "..", "scripts", "tackle-tasks", "diagram-steps.json"), "utf8")) as StepConfig;
+//     assert.doesNotThrow(() => assertStartStepIsInConfig(config, START_STEP));
+// });
 
 test("test_buildWorkflowScript_titlesEveryPhaseWithTheBlockNameAlone", () => {
     // A phase title is the box after the last "::"; a bare block name is its own title.

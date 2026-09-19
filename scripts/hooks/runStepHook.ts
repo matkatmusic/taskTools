@@ -69,7 +69,8 @@ const logFile = () => process.env.RUN_STEP_LOG ?? join(runDirectory, `${currentT
 const packetsDirectory = () => join(runDirectory, "packets");
 // ponytail: one flat cap per block; the full suite budget is 10 minutes, and the hook ceiling is 20 minutes.
 const STEP_TIMEOUT_MS = 1_860_000;
-const START_STEP_KEY = "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK";
+// RETIRED (task 222): read off CONFIG.start once CONFIG is loaded, same pattern as CONFIG/STEPS_BY_KEY below.
+// const START_STEP_KEY = "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK";
 const FAILURES_EXIT_KEY = "pipeline-failuresExit.mmd::FAILURES_EXIT";
 const LOCK_SOURCE_REPO_BOX = "LOCK_SOURCE_REPO";
 // Both exit tails release the source lock, so a block inside them starts without it.
@@ -100,11 +101,16 @@ type HookOutput = {
 };
 
 let CONFIG: StepConfig;
+let START_STEP_KEY: string;
 
 // Every diagram's boxes in one map, keyed "diagram.mmd::BOX", so a seam is a plain lookup.
 function buildStepsByKey(config: StepConfig): Map<string, Step> {
   const stepsByKey = new Map<string, Step>();
   for (const [diagram, entries] of Object.entries(config)) {
+    const isStartValue = typeof entries === "string";
+    if (isStartValue) {
+      continue;
+    }
     for (const entry of entries) {
       stepsByKey.set(`${diagram}::${entry.box}`, { ...entry, diagram });
     }
@@ -218,9 +224,7 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
   return stepRun;
 }
 
-// An overridden hop's translator reshapes the current block's output into the next block's input; the per-hop
-// input guard that already checks every hop's payload catches a bad translator's output the same way it
-// catches anything else, so this never needs its own shape check.
+// Reshapes an overridden hop's output; the per-hop input guard already checks it, needing no separate check.
 function runTranslator(translator: string, payload: Record<string, unknown>): Record<string, unknown> | null {
   const spawnResult = spawnSync("node", ["--no-inspect", translator, JSON.stringify(payload)], { cwd: PROJECT_ROOT, encoding: "utf8" });
   return parseStepResult((spawnResult.stdout ?? "").trimEnd());
@@ -432,7 +436,12 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
     startInput = entry.input;
   }
   if (startStepKey === START_STEP_KEY) {
-    const entry = findResumeEntry(Number(startPacket.taskNumber), String(startPacket.tasksFile));
+    const tasksFile = startPacket.tasksFile;
+    const hasTasksFile = typeof tasksFile === "string";
+    if (!hasTasksFile) {
+      throw new Error(`a run at the start block ${START_STEP_KEY} needs a tasksFile in its input`);
+    }
+    const entry = findResumeEntry(Number(startPacket.taskNumber), tasksFile);
     if (entry !== null) {
       return walkFromStep(entry.block, entry.input, invocation);
     }
@@ -660,9 +669,12 @@ const startInput = (argumentMatch[2] ?? "").trim();
 CONFIG_FILE = resolveConfigFile(startInput);
 CONFIG = JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as StepConfig;
 STEPS_BY_KEY = buildStepsByKey(CONFIG);
-const startStepKeys = startBoxId.includes("::")
-  ? [startBoxId].filter(stepKey => STEPS_BY_KEY.has(stepKey))
-  : getStepKeysNamingBox(startBoxId);
+// Amended after review (F4): String(undefined) would silently become "undefined" for a start-less fixture; `as string` does not.
+START_STEP_KEY = CONFIG.start as string;
+const effectiveStartBoxId = startBoxId === "" ? START_STEP_KEY : startBoxId;
+const startStepKeys = effectiveStartBoxId.includes("::")
+  ? [effectiveStartBoxId].filter(stepKey => STEPS_BY_KEY.has(stepKey))
+  : getStepKeysNamingBox(effectiveStartBoxId);
 
 if (startStepKeys.length === 0) {
   const knownKeys = [...STEPS_BY_KEY.keys()].join(", ");

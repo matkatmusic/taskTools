@@ -71,6 +71,7 @@ for (const pipelineDir of readdirSync(STEPS_DIR)) {
 const config = JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as StepConfig;
 
 for (const [diagramFile, entries] of Object.entries(config)) {
+    if (typeof entries === "string") continue;
     for (const entry of entries) {
         // Mutating blocks write real files; their own test under tests/steps/<diagram>/ covers the contract instead.
         if (entry.mutating) {
@@ -97,11 +98,13 @@ function withoutNext(value: unknown): unknown {
 
 // The edge contract: what a block hands on must cover every key the next block's input template lists.
 for (const [diagramFile, entries] of Object.entries(config)) {
+    if (typeof entries === "string") continue;
     for (const entry of entries) {
         for (const target of entry.next) {
             const targetKey = target.includes("::") ? target : `${diagramFile}::${target}`;
             const [targetDiagram = "", targetBox = ""] = targetKey.split("::");
-            const targetEntry = config[targetDiagram]?.find(candidate => candidate.box === targetBox);
+            const targetDiagramEntries = config[targetDiagram];
+            const targetEntry = typeof targetDiagramEntries === "string" ? undefined : targetDiagramEntries?.find(candidate => candidate.box === targetBox);
 
             test(`test_stepEdge_${entry.box}_to_${targetBox}_agreesOnTheShape`, () => {
                 assert.notEqual(targetEntry, undefined, `${targetKey} is not in steps.json`);
@@ -124,11 +127,13 @@ function getSourceShape(entry: StepConfigEntry, template: BlockTemplate): unknow
 
 // Static check: for each edge, the target's declared input keys must exist in the source's declared output.
 for (const [diagramFile, entries] of Object.entries(config)) {
+    if (typeof entries === "string") continue;
     for (const entry of entries) {
         for (const target of entry.next) {
             const targetKey = target.includes("::") ? target : `${diagramFile}::${target}`;
             const [targetDiagram = "", targetBox = ""] = targetKey.split("::");
-            const targetEntry = config[targetDiagram]?.find(candidate => candidate.box === targetBox);
+            const targetDiagramEntries = config[targetDiagram];
+            const targetEntry = typeof targetDiagramEntries === "string" ? undefined : targetDiagramEntries?.find(candidate => candidate.box === targetBox);
 
             test(`test_stepEdge_${entry.box}_to_${targetBox}_inputIsSubsetOfDeclaredOutput`, () => {
                 assert.notEqual(targetEntry, undefined, `${targetKey} is not in steps.json`);
@@ -144,6 +149,7 @@ for (const [diagramFile, entries] of Object.entries(config)) {
 
 // A prompt block is terminal for its agent; the engine carries the payload, not a next-step line.
 for (const [diagramFile, entries] of Object.entries(config)) {
+    if (typeof entries === "string") continue;
     for (const entry of entries) {
         if (!entry.producesPrompt || entry.mutating) {
             continue;
@@ -161,6 +167,7 @@ for (const [diagramFile, entries] of Object.entries(config)) {
 // A block script picks its own branch; every next literal it prints must be a declared edge.
 const allowedNextByScript = new Map<string, { box: string; allowedNext: Set<string> }>();
 for (const entries of Object.values(config)) {
+    if (typeof entries === "string") continue;
     for (const entry of entries) {
         const existing = allowedNextByScript.get(entry.script) ?? { box: entry.box, allowedNext: new Set<string>() };
         for (const target of entry.next) {
@@ -182,11 +189,13 @@ for (const [scriptPath, { box, allowedNext }] of allowedNextByScript) {
 // A block after a prompt block inherits its packet's next; source-only, since running blocks would commit real repos.
 const boxesAfterAPromptBlock = new Map<string, string>();
 for (const entries of Object.values(config)) {
+    if (typeof entries === "string") continue;
     for (const entry of entries) {
         if (!entry.producesPrompt) continue;
         for (const target of entry.next) {
             const targetBox = target.slice(target.indexOf("::") + 2);
             for (const candidates of Object.values(config)) {
+                if (typeof candidates === "string") continue;
                 for (const candidate of candidates) {
                     if (candidate.box === targetBox) boxesAfterAPromptBlock.set(candidate.script, candidate.box);
                 }

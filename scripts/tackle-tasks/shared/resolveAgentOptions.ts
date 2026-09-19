@@ -88,6 +88,10 @@ export function resolveAgentOptions(stepsConfigPath: string, tasksFile: string, 
   }
   const bandAgent: AgentOptions = { model: band!.model, effort: band!.effort };
   for (const entries of Object.values(config)) {
+    const isStartValue = typeof entries === "string";
+    if (isStartValue) {
+      continue;
+    }
     for (const step of entries) {
       const agent =
         overrides[step.box] ??

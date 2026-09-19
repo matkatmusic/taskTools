@@ -730,7 +730,7 @@ test("test_resetTask_fullReset_ofAnOpenTaskNeverRequiresAResetPointRef", async (
 });
 
 test("test_resetTask_fullReset_ofAnOpenTaskNeverTouchesStagingEvenWithALaterMergeOnTop", async () => {
-    // Setup: task 30 is open and was cut from staging before task 31 merged on top of it — the exact shape that used to throw "reset of 30 blocked. reset 31 first to unblock" for an open task.
+    // Setup: open task 30 was cut from staging before task 31 merged on top; this shape used to throw.
     const repoRoot = makeTempRepoWithCommit();
     const cwd = process.cwd();
     try {
@@ -852,7 +852,10 @@ test("test_resetTask_atEveryBlock_findsThePacketTheHookWrote", async () => {
         const setting = resolveDiagramFolderSetting(repoRoot);
         const stepsByDiagram = generateSteps(setting.diagramFolder, setting.stepsRoot, stepsConfigPath, setting.allowStubs);
         const boxCounts = new Map<string, number>();
-        for (const entry of Object.values(stepsByDiagram).flat()) boxCounts.set(entry.box, (boxCounts.get(entry.box) ?? 0) + 1);
+        for (const entry of Object.values(stepsByDiagram).flat()) {
+            if (typeof entry === "string") continue;
+            boxCounts.set(entry.box, (boxCounts.get(entry.box) ?? 0) + 1);
+        }
         // resetTask rejects a block named by more than one diagram, so those stay out of the sweep.
         const blocks = [...boxCounts].filter(([, count]) => count === 1).map(([box]) => box);
         assert.ok(blocks.length > 10);

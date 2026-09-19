@@ -89,6 +89,16 @@ test("test_PREFLIGHT_OK_Q_scriptPathsInsideRootFailsOnAPathOutsideScripts", () =
     assert.match(failure ?? "", /outside/);
 });
 
+test("test_checkScriptPathsInsideRoot_doesNotThrowWhenConfigHasATopLevelStartString", () => {
+    const root = tempDir();
+    mkdirSync(join(root, "scripts", "tackle-tasks"), { recursive: true });
+    writeFileSync(join(root, "scripts", "tackle-tasks", "diagram-steps.json"), JSON.stringify({
+        "pipeline-x.mmd": [{ box: "X", script: "scripts/tackle-tasks/x/X.ts" }],
+        start: "pipeline-x.mmd::X",
+    }));
+    assert.doesNotThrow(() => checkScriptPathsInsideRoot(root));
+});
+
 test("test_PREFLIGHT_OK_Q_mainRoutesToMarkTaskActiveWhenEverythingPasses", () => {
     const root = tempDir();
     mkdirSync(join(root, ".taskTools"), { recursive: true });

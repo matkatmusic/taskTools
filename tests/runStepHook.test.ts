@@ -8,7 +8,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { checkpointPath, readCheckpoint } from "../scripts/tackle-tasks/shared/checkpoint.ts";
 import type { AgentOptions } from "../scripts/tackle-tasks/generateSteps.ts";
-import { START_STEP } from "../scripts/tackle-tasks/generateWorkflow.ts";
+// RETIRED (task 222): START_STEP no longer exists as a separate export; the repo config is the one source now.
+// import { START_STEP } from "../scripts/tackle-tasks/generateWorkflow.ts";
 import { acquireSourceRepoLock, buildLockOwner, readSourceRepoLock } from "../scripts/tackle-tasks/shared/sourceRepoLock.ts";
 import { writeAgentAnswer } from "../scripts/tackle-tasks/shared/writeAgentAnswer.ts";
 import { readTaskRunState } from "../scripts/tackle-tasks/shared/taskRunState.ts";
@@ -17,7 +18,9 @@ import { addSubmodule, git, makeCommittedRepo, makeLinkedWorktree } from "./supp
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const HOOK = join(REPO_ROOT, "scripts/hooks/runStepHook.ts");
 const FAILURES_EXIT_KEY = "pipeline-failuresExit.mmd::FAILURES_EXIT";
-const [PREAMBLE_DIAGRAM, PREAMBLE_BOX] = START_STEP.split("::");
+const REPO_STEPS_JSON = join(REPO_ROOT, "scripts/tackle-tasks/diagram-steps.json");
+const REPO_START_STEP = String(JSON.parse(readFileSync(REPO_STEPS_JSON, "utf8")).start);
+const [PREAMBLE_DIAGRAM, PREAMBLE_BOX] = REPO_START_STEP.split("::");
 
 function runHook(prompt: string, configFile?: string, worktree?: string, priorPacketCommand?: string) {
     const runsFolder = mkdtempSync(join(tmpdir(), "run-step-"));
@@ -71,6 +74,12 @@ function configWith(build: (writeStep: (box: string, result: Record<string, unkn
             (entry as Record<string, unknown>).template = templatePath;
             (entry as Record<string, unknown>).producesPrompt = isPrompt;
         }
+    }
+    // A fixture that models the real preamble box carries its own start key, the way the real config does.
+    const preambleEntries = config[PREAMBLE_DIAGRAM];
+    const hasPreambleBox = preambleEntries !== undefined && preambleEntries.some(entry => entry.box === PREAMBLE_BOX);
+    if (hasPreambleBox) {
+        (config as Record<string, unknown>).start = `${PREAMBLE_DIAGRAM}::${PREAMBLE_BOX}`;
     }
     writeFileSync(configFile, JSON.stringify(config));
     return configFile;
@@ -1321,7 +1330,7 @@ test("test_runStepHook_advancesTheTailCursorAcrossMultipleBoxesAfterAResumedBoxS
     assert.equal(first.result.ok, false);
 
     // Test action, pass 2: a fresh invocation starting at the preamble.
-    const second = runHook(`/run-step ${START_STEP} ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile);
+    const second = runHook(`/run-step ${REPO_START_STEP} ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile);
 
     // Verification: resume lands on MIDDLE, not A, then walks through LAST and STOP, keeping cursor and checkpoint suppression engaged.
     assert.equal(second.result.ok, true);
@@ -1587,7 +1596,7 @@ test("test_runStepHook_resumesAtTheCheckpointBlockWhenTheStartBlockIsThePreamble
         [PREAMBLE_DIAGRAM]: [{ box: PREAMBLE_BOX, script: writeStep(PREAMBLE_BOX, { scriptSignal: "stop" }), next: [] }],
         "x.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
     }));
-    const { result } = runHook(`/run-step ${START_STEP} ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile);
+    const { result } = runHook(`/run-step ${REPO_START_STEP} ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile);
     assert.deepEqual(result.ran, ["x.mmd::X"]);
 });
 
@@ -1617,7 +1626,7 @@ test("test_runStepHook_marksTheCheckpointResumedBeforeWalking", () => {
         [PREAMBLE_DIAGRAM]: [{ box: PREAMBLE_BOX, script: writeStep(PREAMBLE_BOX, { scriptSignal: "stop" }), next: [] }],
         "x.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
     }));
-    const { checkpoint } = runHook(`/run-step ${START_STEP} ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile, worktree);
+    const { checkpoint } = runHook(`/run-step ${REPO_START_STEP} ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile, worktree);
     assert.equal(checkpoint?.state, "running");
     assert.equal(checkpoint?.resumedFrom?.block, "x.mmd::X");
 });
@@ -1654,7 +1663,7 @@ test("test_runStepHook_carriesResumedFromThroughLaterWrites", () => {
             { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
         ],
     }));
-    const { checkpoint } = runHook(`/run-step ${START_STEP} ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile, worktree);
+    const { checkpoint } = runHook(`/run-step ${REPO_START_STEP} ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile, worktree);
     assert.equal(checkpoint?.block, "one.mmd::A2");
     assert.deepEqual(checkpoint?.resumedFrom, { block: "one.mmd::A", exitType: "tests-red", exitNote: "n" });
 });
@@ -1686,7 +1695,7 @@ test("test_runStepHook_keepsThePassIdWhenItRerunsTheCheckpointBlock", () => {
         [PREAMBLE_DIAGRAM]: [{ box: PREAMBLE_BOX, script: writeStep(PREAMBLE_BOX, { scriptSignal: "stop" }), next: [] }],
         "x.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
     }));
-    const { checkpoint } = runHook(`/run-step ${START_STEP} ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile, worktree);
+    const { checkpoint } = runHook(`/run-step ${REPO_START_STEP} ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile, worktree);
     assert.equal(checkpoint?.passId, "kept-pass-id");
 });
 
@@ -1732,17 +1741,44 @@ test("test_runStepHook_givesEveryNewBlockExecutionItsOwnPassId", () => {
             ],
         };
     });
-    const { result, checkpoint } = runHook(`/run-step ${START_STEP} ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile, worktree);
+    const { result, checkpoint } = runHook(`/run-step ${REPO_START_STEP} ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile, worktree);
     // A2 echoes A's output under input, so A's seenPassId sits one level down in B's packet.
     const seenPassId = JSON.parse(JSON.parse(readFileSync(result.outcome.payload, "utf8")).input).seenPassId;
     assert.equal(seenPassId, "orig-pass-id");
     assert.notEqual(checkpoint?.passId, seenPassId);
 });
 
-test("test_runStepHook_startStepKeyMatchesTheWorkflowsStartStep", () => {
+test("test_runStepHook_startStepKeyHasNoHardcodedLiteral", () => {
     const hookSource = readFileSync(HOOK, "utf8");
-    const match = hookSource.match(/const START_STEP_KEY = "([^"]+)"/);
-    assert.equal(match?.[1], START_STEP);
+    assert.doesNotMatch(hookSource, /^const START_STEP_KEY = "pipeline-preambleStatusCheck\.mmd::PREAMBLE_STATUS_CHECK"/m);
+});
+
+test("test_runStepHook_throwsWhenTheStartBlockHasNoTasksFileInItsInput", () => {
+    const configFile = sayHelloConfig();
+    const config = JSON.parse(readFileSync(configFile, "utf8"));
+    config.start = "pipeline.mmd::SAY_HELLO";
+    writeFileSync(configFile, JSON.stringify(config));
+    const runsFolder = mkdtempSync(join(tmpdir(), "run-step-"));
+    const logFile = join(runsFolder, "run", "run-log.json");
+    const spawned = spawnSync("node", ["--no-inspect", HOOK], {
+        input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt: "/run-step" }),
+        encoding: "utf8",
+        env: { ...process.env, RUN_STEP_LOG: logFile, RUN_STEP_CONFIG: configFile },
+    });
+    const output = JSON.parse(spawned.stdout.trim());
+    assert.match(String(output.reason), /a run at the start block pipeline\.mmd::SAY_HELLO needs a tasksFile in its input/);
+});
+
+test("test_runStepHook_aRunWithNoNamedBlockStartsAtTheConfigsStartBlock", () => {
+    const configFile = sayHelloConfig();
+    const config = JSON.parse(readFileSync(configFile, "utf8"));
+    config.start = "pipeline.mmd::SAY_HELLO";
+    writeFileSync(configFile, JSON.stringify(config));
+    const tasksFile = join(mkdtempSync(join(tmpdir(), "run-step-tasks-")), "tasks.json");
+    writeFileSync(tasksFile, JSON.stringify([{ taskNumber: 7 }]));
+    const { result } = runHook(`/run-step "" ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.ran, ["pipeline.mmd::SAY_HELLO"]);
 });
 
 // A real invocation carries no RUN_STEP_CONFIG; the hook builds steps.json from the packet's taskNumber and tasksFile.
@@ -1761,12 +1797,13 @@ test("test_runStepHook_derivesItsConfigFromThePacketsTasksFileAndTaskNumberWhenN
             template: join(workflowDirectory, "PREAMBLE_STATUS_CHECK.template.json"),
             producesPrompt: false, next: [],
         }],
+        start: REPO_START_STEP,
     }));
     mkdirSync(join(projectRoot, ".taskTools"), { recursive: true });
     writeFileSync(join(projectRoot, ".taskTools/tasks.json"), JSON.stringify([{ taskNumber: 42, title: "t" }]));
     const runLogPath = join(projectRoot, "run-log.json");
 
-    const command = `/run-step ${START_STEP} ${JSON.stringify({ taskNumber: 42, tasksFile: join(projectRoot, ".taskTools/tasks.json") })}`;
+    const command = `/run-step ${REPO_START_STEP} ${JSON.stringify({ taskNumber: 42, tasksFile: join(projectRoot, ".taskTools/tasks.json") })}`;
     const { RUN_STEP_CONFIG: _dropped, ...envWithoutConfigOverride } = process.env;
     const spawned = spawnSync("node", ["--no-inspect", HOOK], {
         encoding: "utf8",
@@ -1799,6 +1836,7 @@ test("test_runStepHook_derivesItsConfigFromThePacketOnAPacketFileContinuationWhe
             { box: "SECOND_BOX", script: join(workflowDirectory, "SECOND_BOX.ts"), template: join(workflowDirectory, "SECOND_BOX.template.json"), producesPrompt: true, next: ["THIRD_BOX"] },
             { box: "THIRD_BOX", script: join(workflowDirectory, "THIRD_BOX.ts"), template: join(workflowDirectory, "THIRD_BOX.template.json"), producesPrompt: false, next: [] },
         ],
+        start: REPO_START_STEP,
     }));
     mkdirSync(join(projectRoot, ".taskTools"), { recursive: true });
     writeFileSync(join(projectRoot, ".taskTools/tasks.json"), JSON.stringify([{ taskNumber: 42, title: "t" }]));
@@ -1806,7 +1844,7 @@ test("test_runStepHook_derivesItsConfigFromThePacketOnAPacketFileContinuationWhe
     const { RUN_STEP_CONFIG: _dropped, ...envWithoutConfigOverride } = process.env;
     const env = { ...envWithoutConfigOverride, RUN_STEP_LOG: runLogPath };
 
-    const firstCommand = `/run-step ${START_STEP} ${JSON.stringify({ taskNumber: 42, tasksFile: join(projectRoot, ".taskTools/tasks.json") })}`;
+    const firstCommand = `/run-step ${REPO_START_STEP} ${JSON.stringify({ taskNumber: 42, tasksFile: join(projectRoot, ".taskTools/tasks.json") })}`;
     const firstSpawned = spawnSync("node", ["--no-inspect", HOOK], {
         encoding: "utf8",
         input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt: firstCommand }),
@@ -1902,7 +1940,7 @@ test("test_runStepHook_startsAtThePreambleWhenTheNamedBlockHasNoState", () => {
         "x.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
     }));
     const { result } = runHook(`/run-step X ${JSON.stringify({ taskNumber: 7, tasksFile: seeded.tasksFile })}`, configFile, undefined, seeded.priorPacketCommand);
-    assert.deepEqual(result.ran, [START_STEP]);
+    assert.deepEqual(result.ran, [REPO_START_STEP]);
     assert.equal(JSON.parse(readFileSync(seeded.tasksFile, "utf8"))[0].run.active, false);
 });
 
@@ -2067,7 +2105,7 @@ for (const entry of REAL_FAILURES_EXIT_STEPS) {
 
         // Pass 2: resume retries the crashed box, which now succeeds, and the chain finishes.
         const tasksFile = join(rootOrigin, "tasks.json");
-        const second = runHook(`/run-step ${START_STEP} ${JSON.stringify({ taskNumber, tasksFile })}`, configFile);
+        const second = runHook(`/run-step ${REPO_START_STEP} ${JSON.stringify({ taskNumber, tasksFile })}`, configFile);
         assert.equal(second.result.ok, true, JSON.stringify(second.result));
         assert.equal(second.result.ran[0], `pipeline-failuresExit.mmd::${entry.box}`);
         assert.equal(second.result.ran[second.result.ran.length - 1], "pipeline-failuresExit.mmd::STOP");
@@ -2081,7 +2119,7 @@ for (const entry of REAL_FAILURES_EXIT_STEPS) {
     });
 }
 
-// Real A/B/C fixture: A(a,b)->{sum,a,b}, B(sum,a,b)->{a,expected}, C(a,expected)->boolean; each hard-codes its own next.  translator is never set here: resolving a translator is task 207's job, not this one's.
+// Real A/B/C fixture, each hard-coded to its own next; no translator.
 function arithmeticConfig(overrides: { A?: { nextBlock: string; translator?: string }; B?: { nextBlock: string; translator?: string } } = {}) {
     const folder = mkdtempSync(join(tmpdir(), "run-step-arithmetic-"));
     const scriptA = join(folder, "A.ts");
@@ -2212,7 +2250,7 @@ test("test_runStepHook_emptyNextGuardDoesNotSwallowAValidNextBlockOverride", () 
     assert.deepEqual(result.ran, ["one.mmd::A", "one.mmd::B"]);
 });
 
-// TEST 5: steps.json overrides A.nextBlock=C AND names a faithful A-to-C translator; run-step reshapes A's {sum,a,b} output into C's {a,expected} input.
+// TEST 5: steps.json overrides A.nextBlock=C with a translator; run-step reshapes A's output into C's input.
 test("test_runStepHook_runsTheOverriddenHopsTranslatorToReshapeThePayload", () => {
     const folder = mkdtempSync(join(tmpdir(), "run-step-translator-"));
     const translatorScript = join(folder, "translate.ts");
@@ -2227,7 +2265,7 @@ test("test_runStepHook_runsTheOverriddenHopsTranslatorToReshapeThePayload", () =
     assert.equal(JSON.parse(readFileSync(result.outcome.payload, "utf8")).result, true);
 });
 
-// TEST 6a: a right-shaped translator that returns the wrong value proves C consumed the translated payload, not A's own output.
+// TEST 6a: wrong value in a right-shaped translator proves C used its payload.
 test("test_runStepHook_aTranslatorThatReturnsTheWrongValueYieldsTheWrongArithmeticResult", () => {
     const folder = mkdtempSync(join(tmpdir(), "run-step-translator-"));
     const translatorScript = join(folder, "translate-wrong-value.ts");
@@ -2242,7 +2280,7 @@ test("test_runStepHook_aTranslatorThatReturnsTheWrongValueYieldsTheWrongArithmet
     assert.equal(JSON.parse(readFileSync(result.outcome.payload, "utf8")).result, false);
 });
 
-// TEST 6b: a translator that drops a required key fails loud on that hop, via the same per-hop input guard child 1 added.
+// TEST 6b: a translator dropping a required key fails loud, caught by child 1's input guard.
 test("test_runStepHook_aTranslatorThatReturnsTheWrongShapeFailsLoudOnThatHop", () => {
     const folder = mkdtempSync(join(tmpdir(), "run-step-translator-"));
     const translatorScript = join(folder, "translate-wrong-shape.ts");

@@ -968,5 +968,6 @@
                 "pipeline-failuresExit.mmd::FAILURES_EXIT"
             ]
         }
-    ]
+    ],
+    "start": "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK"
 }

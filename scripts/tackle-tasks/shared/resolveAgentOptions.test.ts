@@ -40,6 +40,10 @@ function readConfig(configPath: string): StepConfig {
 
 function findEntry(config: StepConfig, box: string) {
     for (const entries of Object.values(config)) {
+        const isStartValue = typeof entries === "string";
+        if (isStartValue) {
+            continue;
+        }
         const entry = entries.find((candidate) => candidate.box === box);
         if (entry !== undefined) return entry;
     }
@@ -145,4 +149,13 @@ test("test_resolveAgentOptions_writesAFencedAgentFileForEveryBandBlock", () => {
     const plannerFile = join(projectRoot, ".claude", "agents", "task-1-plan-the-task.md");
     assert.match(readFileSync(plannerFile, "utf8"), /agentFenceHook\.ts\\" 1 \\".*tasks\.json\\" PLAN_THE_TASK"/);
     assert.equal(existsSync(join(projectRoot, ".claude", "agents", "task-1-codex-reviews-plan.md")), false);
+});
+
+test("test_resolveAgentOptions_doesNotThrowWhenConfigHasATopLevelStartString", () => {
+    const stepsConfigPath = makeStepsConfig();
+    const config = readConfig(stepsConfigPath);
+    config.start = "one.mmd::IMPLEMENT_TASK";
+    writeFileSync(stepsConfigPath, JSON.stringify(config, null, 4));
+    const tasksFile = makeTasksFile([{ taskNumber: 1, difficulty: 4 }]);
+    assert.doesNotThrow(() => resolveAgentOptions(stepsConfigPath, tasksFile, 1));
 });

@@ -76,7 +76,7 @@ const BLOCK_OWNER_FOLDER: Record<string, string> = Object.fromEntries(
 export type AgentOptions = { model: string; effort: string; agentType?: string };
 export type StepConfigEntry = { box: string; script: string; template: string; producesPrompt: boolean; mutating?: boolean; nextBlock?: string; translator?: string; agent?: AgentOptions; next: string[] };
 // Keyed by diagram file name; two diagrams naming the same box share its script but keep separate entries.
-export type StepConfig = Record<string, StepConfigEntry[]>;
+export type StepConfig = Record<string, StepConfigEntry[] | string>;
 export type DiagramEdges = { boxes: string[]; next: Record<string, string[]> };
 export type BlockTemplate = { input: unknown; output?: unknown; agentAnswer?: unknown };
 
@@ -278,6 +278,10 @@ function buildStubTemplate(box: string, producesPrompt: boolean): string {
 function seedInputTemplatesFromPredecessors(config: StepConfig, newTemplatePaths: Set<string>): void {
   const outputByStepKey = new Map<string, unknown>();
   for (const [diagramFile, entries] of Object.entries(config)) {
+    const isStartValue = typeof entries === "string";
+    if (isStartValue) {
+      continue;
+    }
     for (const entry of entries) {
       if (entry.producesPrompt) {
         outputByStepKey.set(`${diagramFile}::${entry.box}`, AGENT_ANSWER_TEMPLATE);
@@ -288,6 +292,10 @@ function seedInputTemplatesFromPredecessors(config: StepConfig, newTemplatePaths
     }
   }
   for (const [diagramFile, entries] of Object.entries(config)) {
+    const isStartValue = typeof entries === "string";
+    if (isStartValue) {
+      continue;
+    }
     for (const entry of entries) {
       for (const target of entry.next) {
         const targetKey = target.includes("::") ? target : `${diagramFile}::${target}`;
@@ -306,7 +314,11 @@ function seedInputTemplatesFromPredecessors(config: StepConfig, newTemplatePaths
 
 function getTemplatePathForStepKey(config: StepConfig, stepKey: string): string | undefined {
   const [diagramFile = "", box = ""] = stepKey.split("::");
-  for (const entry of config[diagramFile] ?? []) {
+  const diagramEntries = config[diagramFile] ?? [];
+  if (typeof diagramEntries === "string") {
+    return undefined;
+  }
+  for (const entry of diagramEntries) {
     const isMatchingBox = entry.box === box;
     if (isMatchingBox) {
       return entry.template;
@@ -323,6 +335,10 @@ function getMutatingFromPreviousConfig(configPath: string): Record<string, boole
   const previousConfig = JSON.parse(readFileSync(configPath, "utf8")) as StepConfig;
   const mutatingByStepKey: Record<string, boolean> = {};
   for (const [diagramFile, entries] of Object.entries(previousConfig)) {
+    const isStartValue = typeof entries === "string";
+    if (isStartValue) {
+      continue;
+    }
     for (const entry of entries) {
       if (entry.mutating) {
         mutatingByStepKey[`${diagramFile}::${entry.box}`] = true;
@@ -340,6 +356,10 @@ function getScriptFromPreviousConfig(configPath: string): Record<string, string>
   const previousConfig = JSON.parse(readFileSync(configPath, "utf8")) as StepConfig;
   const scriptByStepKey: Record<string, string> = {};
   for (const [diagramFile, entries] of Object.entries(previousConfig)) {
+    const isStartValue = typeof entries === "string";
+    if (isStartValue) {
+      continue;
+    }
     for (const entry of entries) {
       scriptByStepKey[`${diagramFile}::${entry.box}`] = entry.script;
     }
@@ -509,6 +529,10 @@ function foldBlockSignpostsIntoNext(next: Record<string, string[]>, blockSignpos
 function assertEveryEntryScriptExists(config: StepConfig): void {
   const missing: string[] = [];
   for (const [diagramFile, entries] of Object.entries(config)) {
+    const isStartValue = typeof entries === "string";
+    if (isStartValue) {
+      continue;
+    }
     for (const entry of entries) {
       const scriptExists = existsSync(join(PROJECT_ROOT, entry.script));
       if (!scriptExists) {
@@ -531,6 +555,39 @@ function getDefaultOwnerFolder(box: string, parsedDiagrams: Map<string, ParsedDi
   }
   // Structurally impossible: box always comes from some diagram's own boxes list.
   throw new Error(`${box} is drawn by no diagram`);
+}
+
+// The one box no arrow points at, across every diagram; the pipeline's own entry point.
+function getStartBlock(config: StepConfig): string {
+  const targetedKeys = new Set<string>();
+  for (const [diagramFile, entries] of Object.entries(config)) {
+    const isStartValue = typeof entries === "string";
+    if (isStartValue) {
+      continue;
+    }
+    for (const entry of entries) {
+      for (const target of entry.next) {
+        targetedKeys.add(target.includes("::") ? target : `${diagramFile}::${target}`);
+      }
+    }
+  }
+  const candidates: string[] = [];
+  for (const [diagramFile, entries] of Object.entries(config)) {
+    const isStartValue = typeof entries === "string";
+    if (isStartValue) {
+      continue;
+    }
+    for (const entry of entries) {
+      const stepKey = `${diagramFile}::${entry.box}`;
+      if (!targetedKeys.has(stepKey)) {
+        candidates.push(stepKey);
+      }
+    }
+  }
+  if (candidates.length !== 1) {
+    throw new Error(`expected exactly one start block, found ${candidates.length}: ${candidates.join(", ")}`);
+  }
+  return candidates[0]!;
 }
 
 export function generateSteps(diagramFolder: string, stepsRoot: string, configPath: string, allowStubs: boolean = true): StepConfig {
@@ -650,6 +707,7 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
   }
   assertEveryEntryScriptExists(config);
   seedInputTemplatesFromPredecessors(config, newTemplatePaths);
+  config.start = getStartBlock(config);
   writeFileSync(configPath, `${JSON.stringify(config, null, 4)}\n`);
   return config;
 }
@@ -657,7 +715,15 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
 function getConfigSummary(config: StepConfig): string {
   const lines: string[] = [];
   for (const [diagramFile, entries] of Object.entries(config)) {
-    lines.push(`${diagramFile}: ${entries.map(entry => entry.box).join(", ")}`);
+    const isStartValue = typeof entries === "string";
+    if (isStartValue) {
+      continue;
+    }
+    const boxNames: string[] = [];
+    for (const entry of entries) {
+      boxNames.push(entry.box);
+    }
+    lines.push(`${diagramFile}: ${boxNames.join(", ")}`);
   }
   return lines.join("\n");
 }

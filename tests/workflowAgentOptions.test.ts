@@ -55,6 +55,7 @@ function buildFixture(agentOverride?: Record<string, AgentOptions>, secondBox: s
             next: [],
         }],
     };
+    config.start = START_KEY;
     const stepsConfigPath = join(folder, "steps.json");
     writeFileSync(stepsConfigPath, JSON.stringify(config));
     return { tasksFile, stepsConfigPath };
