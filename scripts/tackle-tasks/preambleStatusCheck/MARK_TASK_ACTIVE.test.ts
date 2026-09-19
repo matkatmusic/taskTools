@@ -9,9 +9,9 @@ import { claimTask, readTaskRunState } from "../shared/taskRunState.ts";
 
 function packet(taskNumber: number, projectRoot: string): string {
     return JSON.stringify({
-        box: "IS_TASK_ACTIVE_Q", scriptSignal: "continue", taskNumber, runId: "", projectRoot,
+        box: "Q_IS_TASK_ACTIVE_Q", scriptSignal: "continue", taskNumber, runId: "", projectRoot,
         worktree: "", branch: `task-${taskNumber}`, docsMode: "", planFile: "", exitType: "", exitNote: "",
-        next: "MARK_TASK_ACTIVE",
+        next: "B_MARK_TASK_ACTIVE",
     });
 }
 
@@ -24,7 +24,7 @@ function makeProjectRoot(tasks: unknown[]): string {
 test("test_MARK_TASK_ACTIVE_marksTheTaskActiveInTasksJson", () => {
     const root = makeProjectRoot([{ taskNumber: 1 }]);
     const output = main(packet(1, root));
-    assert.equal(output.box, "MARK_TASK_ACTIVE");
+    assert.equal(output.box, "B_MARK_TASK_ACTIVE");
     assert.equal(typeof output.runId, "string");
     assert.notEqual(output.runId, "");
     assert.equal(readTaskRunState(1, root).active, true);

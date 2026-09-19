@@ -1,6 +1,6 @@
 {
     "input": {
-        "box": "MARK_TASK_ACTIVE",
+        "box": "B_MARK_TASK_ACTIVE",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",
@@ -13,7 +13,7 @@
         "exitNote": ""
     },
     "output": {
-        "box": "DOES_WORKTREE_EXIST_Q",
+        "box": "Q_DOES_WORKTREE_EXIST_Q",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",
@@ -24,6 +24,6 @@
         "planFile": "",
         "exitType": "",
         "exitNote": "",
-        "next": "CREATE_WORKTREE"
+        "next": "B_CREATE_WORKTREE"
     }
 }

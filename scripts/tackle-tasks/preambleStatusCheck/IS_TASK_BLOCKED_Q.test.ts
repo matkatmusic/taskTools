@@ -8,9 +8,9 @@ import { main } from "./IS_TASK_BLOCKED_Q.ts";
 
 function packet(taskNumber: number, projectRoot: string): string {
     return JSON.stringify({
-        box: "PREAMBLE_STATUS_CHECK", scriptSignal: "continue", taskNumber, runId: "", projectRoot,
+        box: "Q_PREAMBLE_STATUS_CHECK", scriptSignal: "continue", taskNumber, runId: "", projectRoot,
         worktree: "", branch: `task-${taskNumber}`, docsMode: "", planFile: "", exitType: "", exitNote: "",
-        next: "IS_TASK_BLOCKED_Q",
+        next: "Q_IS_TASK_BLOCKED_Q",
     });
 }
 
@@ -34,13 +34,13 @@ test("test_IS_TASK_BLOCKED_Q_exitsWhenBlockedByNamesAnOpenTask", () => {
 test("test_IS_TASK_BLOCKED_Q_continuesToIsTaskActiveWhenTheBlockerIsNotOpen", () => {
     const root = makeProjectRoot([{ taskNumber: 1, blockedBy: [{ taskNumber: 2, reason: "needs schema" }] }]);
     const output = main(packet(1, root));
-    assert.equal(output.next, "IS_TASK_ACTIVE_Q");
+    assert.equal(output.next, "Q_IS_TASK_ACTIVE_Q");
     assert.equal(output.exitType, "");
 });
 
 test("test_IS_TASK_BLOCKED_Q_continuesToIsTaskActiveWhenThereIsNoBlockedByField", () => {
     const root = makeProjectRoot([{ taskNumber: 1 }]);
     const output = main(packet(1, root));
-    assert.equal(output.next, "IS_TASK_ACTIVE_Q");
+    assert.equal(output.next, "Q_IS_TASK_ACTIVE_Q");
     assert.equal(output.exitType, "");
 });

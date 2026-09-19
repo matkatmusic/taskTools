@@ -52,8 +52,8 @@ function moveStaging(root: string): string {
 
 function packet(projectRoot: string, worktree: string, taskNumber: number, runId: string): string {
     return JSON.stringify({
-        box: "IS_PREVIOUS_RUN_RESUMABLE_Q", scriptSignal: "continue", taskNumber, runId, projectRoot, worktree,
-        branch: `task-${taskNumber}`, docsMode: "", planFile: "", exitType: "", exitNote: "", next: "REBASE_RESUMED_WORKTREE_ONTO_STAGING",
+        box: "Q_IS_PREVIOUS_RUN_RESUMABLE_Q", scriptSignal: "continue", taskNumber, runId, projectRoot, worktree,
+        branch: `task-${taskNumber}`, docsMode: "", planFile: "", exitType: "", exitNote: "", next: "Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING",
     });
 }
 
@@ -67,7 +67,7 @@ test("test_REBASE_RESUMED_WORKTREE_ONTO_STAGING_rebasesOntoTheNewStagingTipAndRe
     const output = await main(packet(root, worktree, 1, "run-1"));
 
     assert.deepEqual(getTemplateShapeMismatches(TEMPLATE.output, output), []);
-    assert.equal(output.next, "DOES_FENCE_COVER_WORKTREE_Q");
+    assert.equal(output.next, "Q_DOES_FENCE_COVER_WORKTREE_Q");
     assert.equal(output.rebased, true);
     assert.equal(output.conflicted, false);
     assert.equal(output.returnTo, "");
@@ -85,7 +85,7 @@ test("test_REBASE_RESUMED_WORKTREE_ONTO_STAGING_skipsWhenStagingHasNotMoved", as
     const output = await main(packet(root, worktree, 2, "run-2"));
 
     assert.deepEqual(getTemplateShapeMismatches(TEMPLATE.output, output), []);
-    assert.equal(output.next, "DOES_FENCE_COVER_WORKTREE_Q");
+    assert.equal(output.next, "Q_DOES_FENCE_COVER_WORKTREE_Q");
     assert.equal(output.rebased, false);
     assert.equal(git(worktree, "rev-parse", "HEAD"), headBefore);
     assert.equal(readSourceRepoLock(root), null);

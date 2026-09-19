@@ -1,0 +1,9 @@
+{
+    "input": {},
+    "output": {
+        "box": "B_ADD_MISSING_FILES_TO_CREATES_FILES",
+        "scriptSignal": "continue",
+        "note": "ADD_MISSING_FILES_TO_CREATES_FILES.ts for B_ADD_MISSING_FILES_TO_CREATES_FILES",
+        "input": ""
+    }
+}

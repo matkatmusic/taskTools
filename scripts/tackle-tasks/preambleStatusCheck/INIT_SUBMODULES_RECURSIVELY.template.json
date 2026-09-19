@@ -1,6 +1,6 @@
 {
     "input": {
-        "box": "DOES_FENCE_COVER_WORKTREE_Q",
+        "box": "Q_DOES_FENCE_COVER_WORKTREE_Q",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",
@@ -13,7 +13,7 @@
         "exitNote": ""
     },
     "output": {
-        "box": "INIT_SUBMODULES_RECURSIVELY",
+        "box": "Q_INIT_SUBMODULES_RECURSIVELY",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",

@@ -26,7 +26,7 @@ test("test_RESET_WORKTREE_tearsDownAndRecreatesACleanWorktreeOnTheTaskBranch", (
 
     // The lease is released by TAKE_WORKTREE_LEASE_BEFORE_RESET before RESET_WORKTREE tears the worktree down.
     const beforeReset = takeLeaseBeforeReset(JSON.stringify({
-        box: "IS_WORKTREE_SAFE_TO_USE_Q", scriptSignal: "continue", taskNumber: 1, runId: "run-old", projectRoot: root,
+        box: "Q_IS_WORKTREE_SAFE_TO_USE_Q", scriptSignal: "continue", taskNumber: 1, runId: "run-old", projectRoot: root,
         worktree: firstWorktree, branch: taskBranchName(1), docsMode: "", planFile: "", exitType: "", exitNote: "",
     }));
 
@@ -47,7 +47,7 @@ test("test_RESET_WORKTREE_runsTwiceWithTheSameInput", () => {
     updateCurrentTaskRun(1, "run-old", { worktree: firstWorktree, leaseRunId: "run-old" }, root);
 
     const beforeReset = takeLeaseBeforeReset(JSON.stringify({
-        box: "IS_WORKTREE_SAFE_TO_USE_Q", scriptSignal: "continue", taskNumber: 1, runId: "run-old", projectRoot: root,
+        box: "Q_IS_WORKTREE_SAFE_TO_USE_Q", scriptSignal: "continue", taskNumber: 1, runId: "run-old", projectRoot: root,
         worktree: firstWorktree, branch: taskBranchName(1), docsMode: "", planFile: "", exitType: "", exitNote: "",
     }));
     const input = JSON.stringify(beforeReset);

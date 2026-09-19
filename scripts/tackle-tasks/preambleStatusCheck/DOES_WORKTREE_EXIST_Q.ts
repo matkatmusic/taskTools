@@ -10,10 +10,10 @@ export function main(input: string): EntryPacket & { next: string } {
     const { exists, worktree } = doesTaskWorktreeExist(packet.taskNumber, packet.projectRoot);
     return {
         ...packet,
-        box: "DOES_WORKTREE_EXIST_Q",
+        box: "Q_DOES_WORKTREE_EXIST_Q",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
         worktree: exists ? (worktree as string) : "",
-        next: exists ? "IS_WORKTREE_SAFE_TO_USE_Q" : "CREATE_WORKTREE",
+        next: exists ? "Q_IS_WORKTREE_SAFE_TO_USE_Q" : "B_CREATE_WORKTREE",
     };
 }
 

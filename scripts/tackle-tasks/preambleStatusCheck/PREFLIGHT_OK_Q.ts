@@ -111,7 +111,7 @@ export function main(input: string): EntryPacket & { next: string } {
     if (failure !== null) {
       return {
         ...packet,
-        box: "PREFLIGHT_OK_Q",
+        box: "Q_PREFLIGHT_OK_Q",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
         exitType: "preflight-failed",
         exitNote: failure,
@@ -132,14 +132,14 @@ export function main(input: string): EntryPacket & { next: string } {
   // if (missingFiles.length > 0) {
   //     return {
   //         ...packet,
-  //         box: "PREFLIGHT_OK_Q",
+  //         box: "Q_PREFLIGHT_OK_Q",
   //         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
   //         exitType: "preflight-failed",
   //         exitNote: `task ${packet.taskNumber}: modifiableFiles names ${missingFiles.join(", ")} but ${missingFiles.length === 1 ? "that file is" : "those files are"} not in the tree the worktree is cut from (${baseTree}); list each in "createsFiles" if this task creates it, or run the task that creates it first`,
   //         next: "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
   //     };
   // }
-  return { ...packet, box: "PREFLIGHT_OK_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "MARK_TASK_ACTIVE" };
+  return { ...packet, box: "Q_PREFLIGHT_OK_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "B_MARK_TASK_ACTIVE" };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

@@ -460,7 +460,7 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     else {
       // Staging moved since this worktree was cut: rebase first, then hand back to the requested block.
       writeRebaseIntent(worktreePath, { taskNumber, runId, targetBlock: stepKey, targetInput: input });
-      const rebaseBlockKey = "pipeline-preambleStatusCheck.mmd::REBASE_RESUMED_WORKTREE_ONTO_STAGING";
+      const rebaseBlockKey = "pipeline-preambleStatusCheck.mmd::Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING";
       const rebaseInput = JSON.stringify({
         box: "", scriptSignal: "", taskNumber, runId, projectRoot: repoRoot, worktree: worktreePath,
         branch: branchName, docsMode: "", planFile: "", exitType: "", exitNote: "",

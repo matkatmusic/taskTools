@@ -15,9 +15,9 @@ import {
 
 function packet(projectRoot: string): string {
     return JSON.stringify({
-        box: "IS_TASK_ACTIVE_Q", scriptSignal: "continue", taskNumber: 1, runId: "", projectRoot,
+        box: "Q_IS_TASK_ACTIVE_Q", scriptSignal: "continue", taskNumber: 1, runId: "", projectRoot,
         worktree: "", branch: "task-1", docsMode: "", planFile: "", exitType: "", exitNote: "",
-        next: "PREFLIGHT_OK_Q",
+        next: "Q_PREFLIGHT_OK_Q",
     });
 }
 
@@ -110,7 +110,7 @@ test("test_PREFLIGHT_OK_Q_mainRoutesToMarkTaskActiveWhenEverythingPasses", () =>
     writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber: 1, modifiableFiles: ["a.ts", "new.ts"], createsFiles: ["new.ts"] }]));
     writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]");
     const output = main(packet(root));
-    assert.equal(output.next, "MARK_TASK_ACTIVE");
+    assert.equal(output.next, "B_MARK_TASK_ACTIVE");
     assert.equal(output.exitType, "");
 });
 
@@ -132,7 +132,7 @@ test("test_PREFLIGHT_OK_Q_mainRoutesToMarkTaskActiveWhenEverythingPasses", () =>
 //     writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]");
 //     // Verification: the worktree will be cut from staging, where the file exists, so preflight passes.
 //     const output = main(packet(root));
-//     assert.equal(output.next, "MARK_TASK_ACTIVE");
+//     assert.equal(output.next, "B_MARK_TASK_ACTIVE");
 // });
 
 // test("test_PREFLIGHT_OK_Q_mainRoutesToReportOnlyExitWhenAnOwnedFileIsMissingAndNotCreatedByTheTask", () => {

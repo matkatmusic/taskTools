@@ -9,9 +9,9 @@ import { claimTask } from "../shared/taskRunState.ts";
 
 function packet(taskNumber: number, projectRoot: string): string {
     return JSON.stringify({
-        box: "IS_TASK_BLOCKED_Q", scriptSignal: "continue", taskNumber, runId: "", projectRoot,
+        box: "Q_IS_TASK_BLOCKED_Q", scriptSignal: "continue", taskNumber, runId: "", projectRoot,
         worktree: "", branch: `task-${taskNumber}`, docsMode: "", planFile: "", exitType: "", exitNote: "",
-        next: "IS_TASK_ACTIVE_Q",
+        next: "Q_IS_TASK_ACTIVE_Q",
     });
 }
 
@@ -24,7 +24,7 @@ function makeProjectRoot(tasks: unknown[]): string {
 test("test_IS_TASK_ACTIVE_Q_continuesToMarkTaskActiveWhenNotActive", () => {
     const root = makeProjectRoot([{ taskNumber: 1 }]);
     const output = main(packet(1, root));
-    assert.equal(output.next, "PREFLIGHT_OK_Q");
+    assert.equal(output.next, "Q_PREFLIGHT_OK_Q");
     assert.equal(output.exitType, "");
 });
 

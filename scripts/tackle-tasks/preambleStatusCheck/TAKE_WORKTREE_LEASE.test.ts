@@ -19,11 +19,11 @@ test("test_TAKE_WORKTREE_LEASE_recordsTheWorktreePathAndLeaseRunIdAndSetsDocsMod
     const worktree = join(root, "..", "task-1-worktree");
 
     const output = main(JSON.stringify({
-        box: "CREATE_WORKTREE", scriptSignal: "continue", taskNumber: 1, runId: "run-a", projectRoot: root,
+        box: "B_CREATE_WORKTREE", scriptSignal: "continue", taskNumber: 1, runId: "run-a", projectRoot: root,
         worktree, branch: taskBranchName(1), docsMode: "", planFile: "", exitType: "", exitNote: "",
     }));
 
-    assert.equal(output.box, "TAKE_WORKTREE_LEASE");
+    assert.equal(output.box, "B_TAKE_WORKTREE_LEASE");
     assert.equal(output.docsMode, "AUTOGEN");
     const state = readTaskRunState(1, root);
     assert.equal(state.worktree, worktree);
@@ -36,7 +36,7 @@ test("test_TAKE_WORKTREE_LEASE_runsTwiceWithTheSameInput", () => {
     claimTask(1, "run-a", root);
     const worktree = join(root, "..", "task-1-worktree");
     const input = JSON.stringify({
-        box: "CREATE_WORKTREE", scriptSignal: "continue", taskNumber: 1, runId: "run-a", projectRoot: root,
+        box: "B_CREATE_WORKTREE", scriptSignal: "continue", taskNumber: 1, runId: "run-a", projectRoot: root,
         worktree, branch: taskBranchName(1), docsMode: "", planFile: "", exitType: "", exitNote: "",
     });
 

@@ -8,7 +8,7 @@ import type { EntryPacket } from "./_packet.ts";
 export function main(input: string): EntryPacket {
     const { next: _next, ...packet } = JSON.parse(input) as EntryPacket & { next?: string };
     const worktree = createFreshTaskWorktree(packet.taskNumber, packet.runId, packet.projectRoot);
-    return { ...packet, box: "CREATE_WORKTREE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, worktree };
+    return { ...packet, box: "B_CREATE_WORKTREE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, worktree };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

@@ -16,7 +16,7 @@ export function main(input: string): EntryPacket {
     // AUTOGEN and UPDATE ran the same two calls before; the brief re-reads tasks.json, so a clarifyRequest lands.
     configureGeneratedArtifactIsolation(packet.taskNumber, packet.worktree);
     writeTaskBriefToDisk(packet.taskNumber, packet.worktree, packet.projectRoot);
-    return { ...packet, box: "DOCUMENT_GENERATION", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
+    return { ...packet, box: "B_DOCUMENT_GENERATION", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

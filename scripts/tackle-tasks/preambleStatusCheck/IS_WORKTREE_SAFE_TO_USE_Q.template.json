@@ -1,6 +1,6 @@
 {
     "input": {
-        "box": "DOES_WORKTREE_EXIST_Q",
+        "box": "Q_DOES_WORKTREE_EXIST_Q",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",
@@ -13,7 +13,7 @@
         "exitNote": ""
     },
     "output": {
-        "box": "IS_WORKTREE_SAFE_TO_USE_Q",
+        "box": "Q_IS_WORKTREE_SAFE_TO_USE_Q",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",
@@ -24,6 +24,6 @@
         "planFile": "",
         "exitType": "",
         "exitNote": "",
-        "next": "TAKE_WORKTREE_LEASE_BEFORE_RESET"
+        "next": "B_TAKE_WORKTREE_LEASE_BEFORE_RESET"
     }
 }

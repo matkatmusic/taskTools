@@ -1,0 +1,9 @@
+{
+    "input": {},
+    "output": {
+        "box": "B_AMEND_TASK_FILE_LIST",
+        "scriptSignal": "continue",
+        "note": "AMEND_TASK_FILE_LIST.ts for B_AMEND_TASK_FILE_LIST",
+        "input": ""
+    }
+}

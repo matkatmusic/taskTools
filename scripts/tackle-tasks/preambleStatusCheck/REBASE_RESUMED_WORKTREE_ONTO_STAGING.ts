@@ -44,11 +44,11 @@ function retainedDestination(worktree: string, own: Record<string, unknown>): (R
 export async function main(input: string): Promise<RebaseResumedPacket & { next: string }> {
   const { next: _next, ...packet } = JSON.parse(input) as EntryPacket & { next?: string };
   const notRebased = {
-    ...packet, box: "REBASE_RESUMED_WORKTREE_ONTO_STAGING", scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+    ...packet, box: "Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING", scriptSignal: SCRIPT_SIGNAL.CONTINUE,
     rebased: false, conflicted: false, stoppedOccurrenceId: "", stoppedCheckoutPath: "", conflictedFilePaths: [], failureReason: "", returnTo: "",
   };
   if (isStagingAncestorOfWorktree(packet.worktree)) {
-    return retainedDestination(packet.worktree, notRebased) ?? { ...notRebased, next: "DOES_FENCE_COVER_WORKTREE_Q" };
+    return retainedDestination(packet.worktree, notRebased) ?? { ...notRebased, next: "Q_DOES_FENCE_COVER_WORKTREE_Q" };
   }
 
   const outcome = await rebaseTaskWorktree({
@@ -78,7 +78,7 @@ export async function main(input: string): Promise<RebaseResumedPacket & { next:
   }
   releaseSourceRepoLock(packet.projectRoot, buildLockOwner(packet.runId, packet.taskNumber));
   const rebased = { ...notRebased, rebased: true };
-  return retainedDestination(packet.worktree, rebased) ?? { ...rebased, next: "DOES_FENCE_COVER_WORKTREE_Q" };
+  return retainedDestination(packet.worktree, rebased) ?? { ...rebased, next: "Q_DOES_FENCE_COVER_WORKTREE_Q" };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

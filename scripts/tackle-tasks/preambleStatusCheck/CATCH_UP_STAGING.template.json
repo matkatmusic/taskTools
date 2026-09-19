@@ -1,0 +1,9 @@
+{
+    "input": {},
+    "output": {
+        "box": "Q_CATCH_UP_STAGING",
+        "scriptSignal": "continue",
+        "note": "CATCH_UP_STAGING.ts for Q_CATCH_UP_STAGING",
+        "input": ""
+    }
+}

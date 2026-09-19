@@ -1,6 +1,6 @@
 {
     "input": {
-        "box": "TAKE_WORKTREE_LEASE_BEFORE_RESET",
+        "box": "B_TAKE_WORKTREE_LEASE_BEFORE_RESET",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",
@@ -13,7 +13,7 @@
         "exitNote": ""
     },
     "output": {
-        "box": "RESET_WORKTREE",
+        "box": "B_RESET_WORKTREE",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",

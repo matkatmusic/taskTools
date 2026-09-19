@@ -44,12 +44,12 @@ export function findResumeEntry(taskNumber: number, tasksFile: string): { block:
             const resetIntent = readRetainedResetIntent(worktree);
             if (resetIntent !== null && resetIntent.runId === newest!.runId) {
                 const input = JSON.stringify({
-                    box: "TAKE_WORKTREE_LEASE_BEFORE_RESET", scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+                    box: "B_TAKE_WORKTREE_LEASE_BEFORE_RESET", scriptSignal: SCRIPT_SIGNAL.CONTINUE,
                     taskNumber, runId: newest!.runId, projectRoot,
                     worktree: resetIntent.worktreePath, branch: resetIntent.branch,
                     docsMode: "", planFile: "", exitType: "", exitNote: "",
                 });
-                return { block: "pipeline-preambleStatusCheck.mmd::RESET_WORKTREE", input };
+                return { block: "pipeline-preambleStatusCheck.mmd::B_RESET_WORKTREE", input };
             }
         }
         writeTaskExitNotes({

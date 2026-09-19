@@ -1,0 +1,9 @@
+{
+    "input": {},
+    "output": {
+        "box": "Q_HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q",
+        "scriptSignal": "continue",
+        "note": "HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q.ts for Q_HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q",
+        "input": ""
+    }
+}

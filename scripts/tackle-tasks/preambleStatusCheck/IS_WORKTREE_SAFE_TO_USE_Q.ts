@@ -10,9 +10,9 @@ export function main(input: string): EntryPacket & { next: string } {
     const { safe } = checkTaskWorktreeSafe(packet.taskNumber, packet.worktree);
     return {
         ...packet,
-        box: "IS_WORKTREE_SAFE_TO_USE_Q",
+        box: "Q_IS_WORKTREE_SAFE_TO_USE_Q",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
-        next: safe ? "IS_PREVIOUS_RUN_RESUMABLE_Q" : "TAKE_WORKTREE_LEASE_BEFORE_RESET",
+        next: safe ? "Q_IS_PREVIOUS_RUN_RESUMABLE_Q" : "B_TAKE_WORKTREE_LEASE_BEFORE_RESET",
     };
 }
 

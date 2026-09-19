@@ -24,10 +24,13 @@ const TRANSLATOR_OVERRIDES: Record<string, string> = {
 // The one folder under scripts/tackle-tasks/ that owns each block's script: the diagram the block belongs to.
 const BLOCKS_BY_OWNER_FOLDER: Record<string, string[]> = {
   preambleStatusCheck: [
-    "PREAMBLE_STATUS_CHECK", "IS_TASK_BLOCKED_Q", "IS_TASK_ACTIVE_Q", "PREFLIGHT_OK_Q", "MARK_TASK_ACTIVE", "DOES_WORKTREE_EXIST_Q",
-    "CREATE_WORKTREE", "TAKE_WORKTREE_LEASE", "IS_WORKTREE_SAFE_TO_USE_Q", "TAKE_WORKTREE_LEASE_BEFORE_RESET",
-    "RESET_WORKTREE", "IS_PREVIOUS_RUN_RESUMABLE_Q", "REBASE_RESUMED_WORKTREE_ONTO_STAGING", "DOES_FENCE_COVER_WORKTREE_Q", "INIT_SUBMODULES_RECURSIVELY",
-    "DOCUMENT_GENERATION",
+    "Q_PREAMBLE_STATUS_CHECK", "Q_IS_TASK_BLOCKED_Q", "Q_IS_TASK_ACTIVE_Q", "Q_PREFLIGHT_OK_Q", "B_MARK_TASK_ACTIVE", "Q_DOES_WORKTREE_EXIST_Q",
+    "B_CREATE_WORKTREE", "B_TAKE_WORKTREE_LEASE", "Q_IS_WORKTREE_SAFE_TO_USE_Q", "B_TAKE_WORKTREE_LEASE_BEFORE_RESET",
+    "B_RESET_WORKTREE", "Q_IS_PREVIOUS_RUN_RESUMABLE_Q", "Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING", "Q_DOES_FENCE_COVER_WORKTREE_Q", "Q_INIT_SUBMODULES_RECURSIVELY",
+    "B_DOCUMENT_GENERATION",
+    "B_LOCK_STAGING_FOR_CATCH_UP", "Q_WAS_CATCH_UP_LOCK_ACQUIRED_Q", "Q_HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q", "B_WAIT_FOR_CATCH_UP_LOCK",
+    "Q_CATCH_UP_STAGING", "B_FIX_CATCH_UP_CONFLICTS", "Q_COMMIT_CATCH_UP_MERGE", "Q_CONTINUE_RESUMED_REBASE", "B_FIX_RESUMED_REBASE_CONFLICTS",
+    "B_AMEND_TASK_FILE_LIST", "B_ADD_MISSING_FILES_TO_CREATES_FILES",
   ],
   reportOnlyExit: ["REPORT_ONLY_EXIT", "STOP"],
   planTheTask: ["IS_DIFFICULTY_7_PLUS_Q", "PLAN_THE_TASK", "PLAN_THE_TASK_CODEX", "DID_CODEX_PLAN_SUCCEED_Q"],
@@ -635,6 +638,45 @@ function assertEveryEntryScriptExists(config: StepConfig): void {
   throw new Error(missing.join("\n"));
 }
 
+// A next/signpost target naming no drawn box anywhere in the folder is a dead link.
+function assertNoDeadLinks(config: StepConfig, parsedDiagrams: Map<string, ParsedDiagram>): void {
+  const allBoxesAnywhere = new Set<string>();
+  for (const data of parsedDiagrams.values()) {
+    for (const box of data.boxes) {
+      allBoxesAnywhere.add(box);
+    }
+  }
+  const deadLinks: string[] = [];
+  for (const [diagramFile, entries] of Object.entries(config)) {
+    const isStartValue = typeof entries === "string";
+    if (isStartValue) {
+      continue;
+    }
+    for (const entry of entries) {
+      for (const target of entry.next) {
+        const isCrossDiagram = target.includes("::");
+        if (isCrossDiagram) {
+          const [targetDiagram, targetBox] = target.split("::") as [string, string];
+          const targetDiagramData = parsedDiagrams.get(targetDiagram);
+          // A target diagram outside this folder cannot be validated here; only a diagram we did parse can dead-link.
+          const targetDiagramIsInThisFolder = targetDiagramData !== undefined;
+          if (targetDiagramIsInThisFolder && !targetDiagramData.boxes.includes(targetBox)) {
+            deadLinks.push(`${diagramFile}::${entry.box} -> ${target}`);
+          }
+          continue;
+        }
+        if (!allBoxesAnywhere.has(target)) {
+          deadLinks.push(`${diagramFile}::${entry.box} -> ${target}`);
+        }
+      }
+    }
+  }
+  if (deadLinks.length === 0) {
+    return;
+  }
+  throw new Error(deadLinks.join("\n"));
+}
+
 // A synthetic box (outside the real 19) is owned by whichever diagram names it first.
 function getDefaultOwnerFolder(box: string, parsedDiagrams: Map<string, ParsedDiagram>): string {
   for (const [diagramFile, data] of parsedDiagrams) {
@@ -831,6 +873,7 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
     config[diagramFile] = entries;
   }
   assertEveryEntryScriptExists(config);
+  assertNoDeadLinks(config, parsedDiagrams);
   seedInputTemplatesFromPredecessors(config, newTemplatePaths);
   config.start = getStartBlock(config);
   writeFileSync(configPath, `${JSON.stringify(config, null, 4)}\n`);

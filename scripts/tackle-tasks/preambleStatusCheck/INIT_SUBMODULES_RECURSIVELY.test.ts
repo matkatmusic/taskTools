@@ -20,12 +20,12 @@ test("test_INIT_SUBMODULES_RECURSIVELY_isANoOpAfterCreateWorktreeForGroupAlready
     claimTask(groupId, "run-a", rootOrigin);
 
     const output = main(JSON.stringify({
-        box: "DOES_FENCE_COVER_WORKTREE_Q", scriptSignal: "continue", taskNumber: groupId, runId: "run-a",
+        box: "Q_DOES_FENCE_COVER_WORKTREE_Q", scriptSignal: "continue", taskNumber: groupId, runId: "run-a",
         projectRoot: rootOrigin, worktree: worktreePath, branch: `task-${groupId}`, docsMode: "UPDATE",
-        planFile: "", exitType: "", exitNote: "", next: "INIT_SUBMODULES_RECURSIVELY",
+        planFile: "", exitType: "", exitNote: "", next: "Q_INIT_SUBMODULES_RECURSIVELY",
     }));
 
-    assert.equal(output.box, "INIT_SUBMODULES_RECURSIVELY");
+    assert.equal(output.box, "Q_INIT_SUBMODULES_RECURSIVELY");
     assert.ok(existsSync(join(worktreePath, "child", "seed.txt")));
     assert.ok(existsSync(join(worktreePath, "child", "grandchild", "seed.txt")));
 });
@@ -37,9 +37,9 @@ test("test_INIT_SUBMODULES_RECURSIVELY_runsTwiceWithTheSameInput", () => {
     seedTasksFile(rootOrigin, [{ taskNumber: groupId, title: "t", modifiableFiles: [] }]);
     claimTask(groupId, "run-a", rootOrigin);
     const input = JSON.stringify({
-        box: "DOES_FENCE_COVER_WORKTREE_Q", scriptSignal: "continue", taskNumber: groupId, runId: "run-a",
+        box: "Q_DOES_FENCE_COVER_WORKTREE_Q", scriptSignal: "continue", taskNumber: groupId, runId: "run-a",
         projectRoot: rootOrigin, worktree: worktreePath, branch: `task-${groupId}`, docsMode: "UPDATE",
-        planFile: "", exitType: "", exitNote: "", next: "INIT_SUBMODULES_RECURSIVELY",
+        planFile: "", exitType: "", exitNote: "", next: "Q_INIT_SUBMODULES_RECURSIVELY",
     });
 
     const firstOutput = main(input);
@@ -60,12 +60,12 @@ test("test_INIT_SUBMODULES_RECURSIVELY_continuesWhenAnOwnedFileLivesInsideASubmo
     claimTask(groupId, "run-a", rootOrigin);
     // Action: run the block.
     const output = main(JSON.stringify({
-        box: "DOES_FENCE_COVER_WORKTREE_Q", scriptSignal: "continue", taskNumber: groupId, runId: "run-a",
+        box: "Q_DOES_FENCE_COVER_WORKTREE_Q", scriptSignal: "continue", taskNumber: groupId, runId: "run-a",
         projectRoot: rootOrigin, worktree: worktreePath, branch: `task-${groupId}`, docsMode: "UPDATE",
-        planFile: "", exitType: "", exitNote: "", next: "INIT_SUBMODULES_RECURSIVELY",
+        planFile: "", exitType: "", exitNote: "", next: "Q_INIT_SUBMODULES_RECURSIVELY",
     }));
     // Verification: the submodule file is on disk after init, so the block continues to DOCUMENT_GENERATION.
-    assert.equal(output.next, "DOCUMENT_GENERATION");
+    assert.equal(output.next, "B_DOCUMENT_GENERATION");
     assert.equal(output.exitType, "");
 });
 
@@ -78,12 +78,12 @@ test("test_INIT_SUBMODULES_RECURSIVELY_routesToFailuresExitWhenAnOwnedFileIsMiss
     claimTask(groupId, "run-a", rootOrigin);
     // Action: run the block.
     const output = main(JSON.stringify({
-        box: "DOES_FENCE_COVER_WORKTREE_Q", scriptSignal: "continue", taskNumber: groupId, runId: "run-a",
+        box: "Q_DOES_FENCE_COVER_WORKTREE_Q", scriptSignal: "continue", taskNumber: groupId, runId: "run-a",
         projectRoot: rootOrigin, worktree: worktreePath, branch: `task-${groupId}`, docsMode: "UPDATE",
-        planFile: "", exitType: "", exitNote: "", next: "INIT_SUBMODULES_RECURSIVELY",
+        planFile: "", exitType: "", exitNote: "", next: "Q_INIT_SUBMODULES_RECURSIVELY",
     }));
     // Verification: only gone.ts is reported; the run goes to FAILURES_EXIT.
-    assert.equal(output.next, "pipeline-failuresExit.mmd::FAILURES_EXIT");
+    assert.equal(output.next, "B_ADD_MISSING_FILES_TO_CREATES_FILES");
     assert.equal(output.exitType, "owned-file-missing");
     assert.match(output.exitNote, /task 900304: modifiableFiles names gone\.ts but that file is not in the worktree.*"createsFiles"/);
 });

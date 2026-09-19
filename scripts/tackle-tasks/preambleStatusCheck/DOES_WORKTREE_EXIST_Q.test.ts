@@ -15,7 +15,7 @@ function makeProjectRoot(tasks: unknown[]): string {
 
 function packet(projectRoot: string): string {
     return JSON.stringify({
-        box: "MARK_TASK_ACTIVE", scriptSignal: "continue", taskNumber: 1, runId: "run-1", projectRoot,
+        box: "B_MARK_TASK_ACTIVE", scriptSignal: "continue", taskNumber: 1, runId: "run-1", projectRoot,
         worktree: "", branch: "task-1", docsMode: "", planFile: "", exitType: "", exitNote: "",
     });
 }
@@ -23,7 +23,7 @@ function packet(projectRoot: string): string {
 test("test_DOES_WORKTREE_EXIST_Q_choosesCreateWorktreeWhenTheConventionalPathIsAbsent", () => {
     const root = makeProjectRoot([{ taskNumber: 1, title: "t1", files: [] }]);
     const output = main(packet(root));
-    assert.equal(output.next, "CREATE_WORKTREE");
+    assert.equal(output.next, "B_CREATE_WORKTREE");
     assert.equal(output.worktree, "");
 });
 
@@ -32,6 +32,6 @@ test("test_DOES_WORKTREE_EXIST_Q_choosesIsWorktreeSafeToUseWhenTheConventionalPa
     const worktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
     mkdirSync(worktree, { recursive: true });
     const output = main(packet(root));
-    assert.equal(output.next, "IS_WORKTREE_SAFE_TO_USE_Q");
+    assert.equal(output.next, "Q_IS_WORKTREE_SAFE_TO_USE_Q");
     assert.equal(output.worktree, worktree);
 });

@@ -1,0 +1,9 @@
+{
+    "input": {},
+    "output": {
+        "box": "B_WAIT_FOR_CATCH_UP_LOCK",
+        "scriptSignal": "continue",
+        "note": "WAIT_FOR_CATCH_UP_LOCK.ts for B_WAIT_FOR_CATCH_UP_LOCK",
+        "input": ""
+    }
+}

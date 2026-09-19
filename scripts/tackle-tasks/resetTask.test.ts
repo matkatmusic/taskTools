@@ -135,7 +135,7 @@ test("test_resetTask_atBlock_reroutesThroughARebaseWhenStagingHasMovedSinceTheWo
         // Verification: the checkpoint detours through the rebase block first, with the original target stashed.
         assert.match(said, /staging moved.*rebases onto staging before resuming at [^:]+::RUN_TASK_TESTS/);
         const checkpoint = readCheckpoint(worktreePath)!;
-        assert.equal(checkpoint.block, "pipeline-preambleStatusCheck.mmd::REBASE_RESUMED_WORKTREE_ONTO_STAGING");
+        assert.equal(checkpoint.block, "pipeline-preambleStatusCheck.mmd::Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING");
         const intent = readRetainedRebaseIntent(worktreePath)!;
         assert.ok(intent !== null);
         assert.equal(intent.taskNumber, 9);

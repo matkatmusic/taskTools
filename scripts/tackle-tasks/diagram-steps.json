@@ -235,7 +235,7 @@
             "producesPrompt": false,
             "next": [
                 "pipeline-runFullSuite.mmd::RUN_FULL_SUITE",
-                "pipeline-preambleStatusCheck.mmd::DOES_FENCE_COVER_WORKTREE_Q",
+                "pipeline-preambleStatusCheck.mmd::Q_DOES_FENCE_COVER_WORKTREE_Q",
                 "ARE_2_CONFLICT_FIXES_DONE_Q"
             ]
         },
@@ -587,159 +587,262 @@
     ],
     "pipeline-preambleStatusCheck.mmd": [
         {
-            "box": "PREAMBLE_STATUS_CHECK",
-            "script": "scripts/tackle-tasks/preambleStatusCheck/PREAMBLE_STATUS_CHECK.ts",
-            "template": "scripts/tackle-tasks/preambleStatusCheck/PREAMBLE_STATUS_CHECK.template.json",
+            "box": "B_ADD_MISSING_FILES_TO_CREATES_FILES",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/ADD_MISSING_FILES_TO_CREATES_FILES.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/ADD_MISSING_FILES_TO_CREATES_FILES.template.json",
             "producesPrompt": false,
-            "nextBlock": "IS_TASK_BLOCKED_Q",
-            "translator": "scripts/tackle-tasks/shared/identityTranslator.ts",
             "next": [
-                "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
-                "IS_TASK_BLOCKED_Q"
+                "B_DOCUMENT_GENERATION"
             ]
         },
         {
-            "box": "IS_TASK_BLOCKED_Q",
-            "script": "scripts/tackle-tasks/preambleStatusCheck/IS_TASK_BLOCKED_Q.ts",
-            "template": "scripts/tackle-tasks/preambleStatusCheck/IS_TASK_BLOCKED_Q.template.json",
+            "box": "B_AMEND_TASK_FILE_LIST",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/AMEND_TASK_FILE_LIST.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/AMEND_TASK_FILE_LIST.template.json",
             "producesPrompt": false,
             "next": [
-                "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
-                "IS_TASK_ACTIVE_Q"
+                "Q_INIT_SUBMODULES_RECURSIVELY"
             ]
         },
         {
-            "box": "IS_TASK_ACTIVE_Q",
-            "script": "scripts/tackle-tasks/preambleStatusCheck/IS_TASK_ACTIVE_Q.ts",
-            "template": "scripts/tackle-tasks/preambleStatusCheck/IS_TASK_ACTIVE_Q.template.json",
-            "producesPrompt": false,
-            "next": [
-                "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
-                "PREFLIGHT_OK_Q"
-            ]
-        },
-        {
-            "box": "PREFLIGHT_OK_Q",
-            "script": "scripts/tackle-tasks/preambleStatusCheck/PREFLIGHT_OK_Q.ts",
-            "template": "scripts/tackle-tasks/preambleStatusCheck/PREFLIGHT_OK_Q.template.json",
-            "producesPrompt": false,
-            "next": [
-                "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
-                "MARK_TASK_ACTIVE"
-            ]
-        },
-        {
-            "box": "MARK_TASK_ACTIVE",
-            "script": "scripts/tackle-tasks/preambleStatusCheck/MARK_TASK_ACTIVE.ts",
-            "template": "scripts/tackle-tasks/preambleStatusCheck/MARK_TASK_ACTIVE.template.json",
-            "producesPrompt": false,
-            "next": [
-                "DOES_WORKTREE_EXIST_Q"
-            ]
-        },
-        {
-            "box": "DOES_WORKTREE_EXIST_Q",
-            "script": "scripts/tackle-tasks/preambleStatusCheck/DOES_WORKTREE_EXIST_Q.ts",
-            "template": "scripts/tackle-tasks/preambleStatusCheck/DOES_WORKTREE_EXIST_Q.template.json",
-            "producesPrompt": false,
-            "next": [
-                "CREATE_WORKTREE",
-                "IS_WORKTREE_SAFE_TO_USE_Q"
-            ]
-        },
-        {
-            "box": "CREATE_WORKTREE",
+            "box": "B_CREATE_WORKTREE",
             "script": "scripts/tackle-tasks/preambleStatusCheck/CREATE_WORKTREE.ts",
             "template": "scripts/tackle-tasks/preambleStatusCheck/CREATE_WORKTREE.template.json",
             "producesPrompt": false,
             "next": [
-                "TAKE_WORKTREE_LEASE"
+                "B_TAKE_WORKTREE_LEASE"
             ]
         },
         {
-            "box": "TAKE_WORKTREE_LEASE",
-            "script": "scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE.ts",
-            "template": "scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE.template.json",
-            "producesPrompt": false,
-            "next": [
-                "INIT_SUBMODULES_RECURSIVELY"
-            ]
-        },
-        {
-            "box": "IS_WORKTREE_SAFE_TO_USE_Q",
-            "script": "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_SAFE_TO_USE_Q.ts",
-            "template": "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_SAFE_TO_USE_Q.template.json",
-            "producesPrompt": false,
-            "next": [
-                "TAKE_WORKTREE_LEASE_BEFORE_RESET",
-                "IS_PREVIOUS_RUN_RESUMABLE_Q"
-            ]
-        },
-        {
-            "box": "TAKE_WORKTREE_LEASE_BEFORE_RESET",
-            "script": "scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE_BEFORE_RESET.ts",
-            "template": "scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE_BEFORE_RESET.template.json",
-            "producesPrompt": false,
-            "next": [
-                "RESET_WORKTREE"
-            ]
-        },
-        {
-            "box": "RESET_WORKTREE",
-            "script": "scripts/tackle-tasks/preambleStatusCheck/RESET_WORKTREE.ts",
-            "template": "scripts/tackle-tasks/preambleStatusCheck/RESET_WORKTREE.template.json",
-            "producesPrompt": false,
-            "next": [
-                "INIT_SUBMODULES_RECURSIVELY"
-            ]
-        },
-        {
-            "box": "IS_PREVIOUS_RUN_RESUMABLE_Q",
-            "script": "scripts/tackle-tasks/preambleStatusCheck/IS_PREVIOUS_RUN_RESUMABLE_Q.ts",
-            "template": "scripts/tackle-tasks/preambleStatusCheck/IS_PREVIOUS_RUN_RESUMABLE_Q.template.json",
-            "producesPrompt": false,
-            "next": [
-                "pipeline-failuresExit.mmd::FAILURES_EXIT",
-                "REBASE_RESUMED_WORKTREE_ONTO_STAGING"
-            ]
-        },
-        {
-            "box": "REBASE_RESUMED_WORKTREE_ONTO_STAGING",
-            "script": "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts",
-            "template": "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.template.json",
-            "producesPrompt": false,
-            "next": [
-                "DOES_FENCE_COVER_WORKTREE_Q",
-                "pipeline-commitMergeConflictFixIfNeeded.mmd::ARE_2_CONFLICT_FIXES_DONE_Q"
-            ]
-        },
-        {
-            "box": "DOES_FENCE_COVER_WORKTREE_Q",
-            "script": "scripts/tackle-tasks/preambleStatusCheck/DOES_FENCE_COVER_WORKTREE_Q.ts",
-            "template": "scripts/tackle-tasks/preambleStatusCheck/DOES_FENCE_COVER_WORKTREE_Q.template.json",
-            "producesPrompt": false,
-            "next": [
-                "pipeline-failuresExit.mmd::FAILURES_EXIT",
-                "INIT_SUBMODULES_RECURSIVELY"
-            ]
-        },
-        {
-            "box": "INIT_SUBMODULES_RECURSIVELY",
-            "script": "scripts/tackle-tasks/preambleStatusCheck/INIT_SUBMODULES_RECURSIVELY.ts",
-            "template": "scripts/tackle-tasks/preambleStatusCheck/INIT_SUBMODULES_RECURSIVELY.template.json",
-            "producesPrompt": false,
-            "next": [
-                "pipeline-failuresExit.mmd::FAILURES_EXIT",
-                "DOCUMENT_GENERATION"
-            ]
-        },
-        {
-            "box": "DOCUMENT_GENERATION",
+            "box": "B_DOCUMENT_GENERATION",
             "script": "scripts/tackle-tasks/preambleStatusCheck/DOCUMENT_GENERATION.ts",
             "template": "scripts/tackle-tasks/preambleStatusCheck/DOCUMENT_GENERATION.template.json",
             "producesPrompt": false,
             "next": [
                 "pipeline-planTheTask.mmd::IS_DIFFICULTY_7_PLUS_Q"
+            ]
+        },
+        {
+            "box": "B_FIX_CATCH_UP_CONFLICTS",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/FIX_CATCH_UP_CONFLICTS.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/FIX_CATCH_UP_CONFLICTS.template.json",
+            "producesPrompt": true,
+            "next": [
+                "Q_COMMIT_CATCH_UP_MERGE"
+            ]
+        },
+        {
+            "box": "B_FIX_RESUMED_REBASE_CONFLICTS",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/FIX_RESUMED_REBASE_CONFLICTS.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/FIX_RESUMED_REBASE_CONFLICTS.template.json",
+            "producesPrompt": true,
+            "next": [
+                "Q_CONTINUE_RESUMED_REBASE"
+            ]
+        },
+        {
+            "box": "B_LOCK_STAGING_FOR_CATCH_UP",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/LOCK_STAGING_FOR_CATCH_UP.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/LOCK_STAGING_FOR_CATCH_UP.template.json",
+            "producesPrompt": false,
+            "takesSourceLock": true,
+            "next": [
+                "Q_WAS_CATCH_UP_LOCK_ACQUIRED_Q"
+            ]
+        },
+        {
+            "box": "B_MARK_TASK_ACTIVE",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/MARK_TASK_ACTIVE.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/MARK_TASK_ACTIVE.template.json",
+            "producesPrompt": false,
+            "next": [
+                "Q_DOES_WORKTREE_EXIST_Q"
+            ]
+        },
+        {
+            "box": "B_RESET_WORKTREE",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/RESET_WORKTREE.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/RESET_WORKTREE.template.json",
+            "producesPrompt": false,
+            "next": [
+                "Q_INIT_SUBMODULES_RECURSIVELY"
+            ]
+        },
+        {
+            "box": "B_TAKE_WORKTREE_LEASE",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE.template.json",
+            "producesPrompt": false,
+            "next": [
+                "Q_INIT_SUBMODULES_RECURSIVELY"
+            ]
+        },
+        {
+            "box": "B_TAKE_WORKTREE_LEASE_BEFORE_RESET",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE_BEFORE_RESET.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE_BEFORE_RESET.template.json",
+            "producesPrompt": false,
+            "next": [
+                "B_RESET_WORKTREE"
+            ]
+        },
+        {
+            "box": "B_WAIT_FOR_CATCH_UP_LOCK",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/WAIT_FOR_CATCH_UP_LOCK.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/WAIT_FOR_CATCH_UP_LOCK.template.json",
+            "producesPrompt": false,
+            "next": [
+                "B_LOCK_STAGING_FOR_CATCH_UP"
+            ]
+        },
+        {
+            "box": "Q_CATCH_UP_STAGING",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/CATCH_UP_STAGING.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/CATCH_UP_STAGING.template.json",
+            "producesPrompt": false,
+            "next": [
+                "B_MARK_TASK_ACTIVE",
+                "B_FIX_CATCH_UP_CONFLICTS"
+            ]
+        },
+        {
+            "box": "Q_COMMIT_CATCH_UP_MERGE",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/COMMIT_CATCH_UP_MERGE.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/COMMIT_CATCH_UP_MERGE.template.json",
+            "producesPrompt": false,
+            "next": [
+                "Q_CATCH_UP_STAGING",
+                "B_FIX_CATCH_UP_CONFLICTS"
+            ]
+        },
+        {
+            "box": "Q_CONTINUE_RESUMED_REBASE",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/CONTINUE_RESUMED_REBASE.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/CONTINUE_RESUMED_REBASE.template.json",
+            "producesPrompt": false,
+            "next": [
+                "Q_DOES_FENCE_COVER_WORKTREE_Q",
+                "B_FIX_RESUMED_REBASE_CONFLICTS"
+            ]
+        },
+        {
+            "box": "Q_DOES_FENCE_COVER_WORKTREE_Q",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/DOES_FENCE_COVER_WORKTREE_Q.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/DOES_FENCE_COVER_WORKTREE_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "B_AMEND_TASK_FILE_LIST",
+                "Q_INIT_SUBMODULES_RECURSIVELY"
+            ]
+        },
+        {
+            "box": "Q_DOES_WORKTREE_EXIST_Q",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/DOES_WORKTREE_EXIST_Q.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/DOES_WORKTREE_EXIST_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "B_CREATE_WORKTREE",
+                "Q_IS_WORKTREE_SAFE_TO_USE_Q"
+            ]
+        },
+        {
+            "box": "Q_HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "B_WAIT_FOR_CATCH_UP_LOCK",
+                "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT"
+            ]
+        },
+        {
+            "box": "Q_INIT_SUBMODULES_RECURSIVELY",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/INIT_SUBMODULES_RECURSIVELY.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/INIT_SUBMODULES_RECURSIVELY.template.json",
+            "producesPrompt": false,
+            "next": [
+                "B_ADD_MISSING_FILES_TO_CREATES_FILES",
+                "B_DOCUMENT_GENERATION"
+            ]
+        },
+        {
+            "box": "Q_IS_PREVIOUS_RUN_RESUMABLE_Q",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/IS_PREVIOUS_RUN_RESUMABLE_Q.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/IS_PREVIOUS_RUN_RESUMABLE_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING",
+                "Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING"
+            ]
+        },
+        {
+            "box": "Q_IS_TASK_ACTIVE_Q",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/IS_TASK_ACTIVE_Q.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/IS_TASK_ACTIVE_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
+                "Q_PREFLIGHT_OK_Q"
+            ]
+        },
+        {
+            "box": "Q_IS_TASK_BLOCKED_Q",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/IS_TASK_BLOCKED_Q.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/IS_TASK_BLOCKED_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
+                "Q_IS_TASK_ACTIVE_Q"
+            ]
+        },
+        {
+            "box": "Q_IS_WORKTREE_SAFE_TO_USE_Q",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_SAFE_TO_USE_Q.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_SAFE_TO_USE_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "B_TAKE_WORKTREE_LEASE_BEFORE_RESET",
+                "Q_IS_PREVIOUS_RUN_RESUMABLE_Q"
+            ]
+        },
+        {
+            "box": "Q_PREAMBLE_STATUS_CHECK",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/PREAMBLE_STATUS_CHECK.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/PREAMBLE_STATUS_CHECK.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
+                "Q_IS_TASK_BLOCKED_Q"
+            ]
+        },
+        {
+            "box": "Q_PREFLIGHT_OK_Q",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/PREFLIGHT_OK_Q.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/PREFLIGHT_OK_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
+                "B_LOCK_STAGING_FOR_CATCH_UP"
+            ]
+        },
+        {
+            "box": "Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.template.json",
+            "producesPrompt": false,
+            "next": [
+                "Q_DOES_FENCE_COVER_WORKTREE_Q",
+                "B_FIX_RESUMED_REBASE_CONFLICTS"
+            ]
+        },
+        {
+            "box": "Q_WAS_CATCH_UP_LOCK_ACQUIRED_Q",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/WAS_CATCH_UP_LOCK_ACQUIRED_Q.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/WAS_CATCH_UP_LOCK_ACQUIRED_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "Q_CATCH_UP_STAGING",
+                "Q_HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q"
             ]
         }
     ],
@@ -910,7 +1013,7 @@
             "template": "scripts/tackle-tasks/whatDidThePlannerReturn/WRITE_CLARIFY_REQUEST.template.json",
             "producesPrompt": false,
             "next": [
-                "pipeline-preambleStatusCheck.mmd::DOCUMENT_GENERATION"
+                "pipeline-preambleStatusCheck.mmd::B_DOCUMENT_GENERATION"
             ]
         }
     ],
@@ -946,5 +1049,5 @@
             ]
         }
     ],
-    "start": "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK"
+    "start": "pipeline-preambleStatusCheck.mmd::Q_PREAMBLE_STATUS_CHECK"
 }

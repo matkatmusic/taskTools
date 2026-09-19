@@ -1,0 +1,9 @@
+{
+    "input": {},
+    "output": {
+        "box": "B_FIX_CATCH_UP_CONFLICTS",
+        "scriptSignal": "continue",
+        "note": "FIX_CATCH_UP_CONFLICTS.ts for B_FIX_CATCH_UP_CONFLICTS",
+        "input": ""
+    }
+}

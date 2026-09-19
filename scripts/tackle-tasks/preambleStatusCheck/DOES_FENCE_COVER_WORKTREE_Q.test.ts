@@ -12,9 +12,9 @@ function seedTasksFile(root: string, tasks: unknown[]): void {
 
 function packet(taskNumber: number, worktree: string, projectRoot: string): string {
     return JSON.stringify({
-        box: "IS_PREVIOUS_RUN_RESUMABLE_Q", scriptSignal: "continue", taskNumber, runId: "run-1", projectRoot,
+        box: "Q_IS_PREVIOUS_RUN_RESUMABLE_Q", scriptSignal: "continue", taskNumber, runId: "run-1", projectRoot,
         worktree, branch: `task-${taskNumber}`, docsMode: "", planFile: "", exitType: "", exitNote: "",
-        next: "DOES_FENCE_COVER_WORKTREE_Q",
+        next: "Q_DOES_FENCE_COVER_WORKTREE_Q",
     });
 }
 
@@ -27,7 +27,7 @@ test("test_DOES_FENCE_COVER_WORKTREE_Q_choosesInitSubmodulesRecursivelyAndSetsDo
 
     const output = main(packet(groupId, worktreePath, rootOrigin));
 
-    assert.equal(output.next, "INIT_SUBMODULES_RECURSIVELY");
+    assert.equal(output.next, "Q_INIT_SUBMODULES_RECURSIVELY");
     assert.equal(output.docsMode, "UPDATE");
     assert.equal(output.exitType, "");
 });
@@ -43,7 +43,7 @@ test("test_DOES_FENCE_COVER_WORKTREE_Q_ignoresTheResumedRunsOwnCheckpointFile", 
 
     const output = main(packet(groupId, worktreePath, rootOrigin));
 
-    assert.equal(output.next, "INIT_SUBMODULES_RECURSIVELY");
+    assert.equal(output.next, "Q_INIT_SUBMODULES_RECURSIVELY");
     assert.equal(output.exitType, "");
 });
 
@@ -57,7 +57,7 @@ test("test_DOES_FENCE_COVER_WORKTREE_Q_choosesFailuresExitWhenAnEditTouchesAnUnd
 
     const output = main(packet(groupId, worktreePath, rootOrigin));
 
-    assert.equal(output.next, "pipeline-failuresExit.mmd::FAILURES_EXIT");
+    assert.equal(output.next, "B_AMEND_TASK_FILE_LIST");
     assert.equal(output.exitType, "fence-violation");
     assert.match(String(output.exitNote), /outside\.txt/);
     assert.match(String(output.exitNote), new RegExp(`\\/tackle-tasks \\[${groupId}\\] to resume`));

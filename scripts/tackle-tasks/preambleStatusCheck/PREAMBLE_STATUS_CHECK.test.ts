@@ -18,9 +18,9 @@ test("test_PREAMBLE_STATUS_CHECK_continuesToIsTaskBlockedWhenTheTaskIsInTasksJso
     const tasksFile = makeTasksFile([{ taskNumber: 1 }]);
     const output = main(JSON.stringify({ taskNumber: 1, tasksFile }));
     assert.deepEqual(output, {
-        box: "PREAMBLE_STATUS_CHECK", scriptSignal: "continue", taskNumber: 1, runId: "",
+        box: "Q_PREAMBLE_STATUS_CHECK", scriptSignal: "continue", taskNumber: 1, runId: "",
         projectRoot: output.projectRoot, worktree: "", branch: taskBranchName(1), docsMode: "", planFile: "",
-        exitType: "", exitNote: "", next: "IS_TASK_BLOCKED_Q",
+        exitType: "", exitNote: "", next: "Q_IS_TASK_BLOCKED_Q",
     });
 });
 
@@ -29,14 +29,14 @@ test("test_PREAMBLE_STATUS_CHECK_continuesToIsTaskBlockedWhenDifficultyIsAbove6"
     const tasksFile = makeTasksFile([{ taskNumber: 7, difficulty: 7 }]);
     const output = main(JSON.stringify({ taskNumber: 7, tasksFile }));
     assert.equal(output.exitType, "");
-    assert.equal(output.next, "IS_TASK_BLOCKED_Q");
+    assert.equal(output.next, "Q_IS_TASK_BLOCKED_Q");
 });
 
 test("test_PREAMBLE_STATUS_CHECK_exitsWhenTheTaskNumberIsNotInTasksJson", () => {
     const tasksFile = makeTasksFile([{ taskNumber: 1 }]);
     const output = main(JSON.stringify({ taskNumber: 999, tasksFile }));
     assert.deepEqual(output, {
-        box: "PREAMBLE_STATUS_CHECK", scriptSignal: "continue", taskNumber: 999, runId: "",
+        box: "Q_PREAMBLE_STATUS_CHECK", scriptSignal: "continue", taskNumber: 999, runId: "",
         projectRoot: output.projectRoot, worktree: "", branch: taskBranchName(999), docsMode: "", planFile: "",
         exitType: "invalid-number", exitNote: "task number is not in tasks.json", next: "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
     });

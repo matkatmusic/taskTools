@@ -15,9 +15,9 @@ function makeProjectRoot(tasks: unknown[]): string {
 
 function packet(taskNumber: number, worktree: string, runId: string, projectRoot: string): string {
     return JSON.stringify({
-        box: "IS_WORKTREE_SAFE_TO_USE_Q", scriptSignal: "continue", taskNumber, runId, projectRoot,
+        box: "Q_IS_WORKTREE_SAFE_TO_USE_Q", scriptSignal: "continue", taskNumber, runId, projectRoot,
         worktree, branch: `task-${taskNumber}`, docsMode: "", planFile: "", exitType: "", exitNote: "",
-        next: "IS_PREVIOUS_RUN_RESUMABLE_Q",
+        next: "Q_IS_PREVIOUS_RUN_RESUMABLE_Q",
     });
 }
 
@@ -33,7 +33,7 @@ test("test_IS_PREVIOUS_RUN_RESUMABLE_Q_choosesRebaseResumedWorktreeWhenTheEndedR
 
     const output = main(packet(1, worktree, "run-new", root));
 
-    assert.equal(output.next, "REBASE_RESUMED_WORKTREE_ONTO_STAGING");
+    assert.equal(output.next, "Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING");
     assert.equal(output.exitType, "");
 });
 

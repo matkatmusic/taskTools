@@ -7,9 +7,9 @@ import { makeLayeredSubmoduleFixture, makeLinkedWorktree } from "../../../tests/
 
 function packet(worktree: string, groupId: number): string {
     return JSON.stringify({
-        box: "DOES_WORKTREE_EXIST_Q", scriptSignal: "continue", taskNumber: groupId, runId: "run-1",
+        box: "Q_DOES_WORKTREE_EXIST_Q", scriptSignal: "continue", taskNumber: groupId, runId: "run-1",
         projectRoot: "/tmp/unused", worktree, branch: `task-${groupId}`, docsMode: "", planFile: "",
-        exitType: "", exitNote: "", next: "IS_WORKTREE_SAFE_TO_USE_Q",
+        exitType: "", exitNote: "", next: "Q_IS_WORKTREE_SAFE_TO_USE_Q",
     });
 }
 
@@ -18,7 +18,7 @@ test("test_IS_WORKTREE_SAFE_TO_USE_Q_choosesIsPreviousRunResumableWhenTheWorktre
     const groupId = 900_201;
     const worktreePath = makeLinkedWorktree(rootOrigin, groupId);
     const output = main(packet(worktreePath, groupId));
-    assert.equal(output.next, "IS_PREVIOUS_RUN_RESUMABLE_Q");
+    assert.equal(output.next, "Q_IS_PREVIOUS_RUN_RESUMABLE_Q");
 });
 
 test("test_IS_WORKTREE_SAFE_TO_USE_Q_choosesTakeWorktreeLeaseBeforeResetWhenHeadIsOnTheWrongBranch", () => {
@@ -27,5 +27,5 @@ test("test_IS_WORKTREE_SAFE_TO_USE_Q_choosesTakeWorktreeLeaseBeforeResetWhenHead
     const worktreePath = makeLinkedWorktree(rootOrigin, groupId);
     execFileSync("git", ["-C", worktreePath, "checkout", "-b", "some-other-branch"], { stdio: "ignore" });
     const output = main(packet(worktreePath, groupId));
-    assert.equal(output.next, "TAKE_WORKTREE_LEASE_BEFORE_RESET");
+    assert.equal(output.next, "B_TAKE_WORKTREE_LEASE_BEFORE_RESET");
 });

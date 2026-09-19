@@ -16,7 +16,7 @@ export function main(input: string): EntryPacket {
     if (outcome.status === "adopted" && state.worktree !== null) {
         releaseTaskWorktreeLease({ worktreePath: state.worktree, runId: packet.runId });
     }
-    return { ...packet, box: "TAKE_WORKTREE_LEASE_BEFORE_RESET", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
+    return { ...packet, box: "B_TAKE_WORKTREE_LEASE_BEFORE_RESET", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

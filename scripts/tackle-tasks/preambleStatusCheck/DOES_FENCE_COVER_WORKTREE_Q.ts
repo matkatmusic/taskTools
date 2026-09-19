@@ -12,17 +12,17 @@ export function main(input: string): EntryPacket & { next: string } {
     });
     if (inside) {
         return {
-            ...packet, box: "DOES_FENCE_COVER_WORKTREE_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE,
-            docsMode: "UPDATE", next: "INIT_SUBMODULES_RECURSIVELY",
+            ...packet, box: "Q_DOES_FENCE_COVER_WORKTREE_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+            docsMode: "UPDATE", next: "Q_INIT_SUBMODULES_RECURSIVELY",
         };
     }
     return {
         ...packet,
-        box: "DOES_FENCE_COVER_WORKTREE_Q",
+        box: "Q_DOES_FENCE_COVER_WORKTREE_Q",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
         exitType: "fence-violation",
         exitNote: `paused, fence-violation: the resumed worktree touched files the task does not own: ${violations.join(", ")}. nothing merged. worktree preserved. Review those files. Small and part of the task: add them to the task's modifiableFiles or files in tasks.json, then run /tackle-tasks [${packet.taskNumber}] to resume at this check. Large or not part of the task: ask the user what to do.`,
-        next: "pipeline-failuresExit.mmd::FAILURES_EXIT",
+        next: "B_AMEND_TASK_FILE_LIST",
     };
 }
 

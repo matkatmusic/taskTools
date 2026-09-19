@@ -1,6 +1,6 @@
 {
     "input": {
-        "box": "REBASE_RESUMED_WORKTREE_ONTO_STAGING",
+        "box": "Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",
@@ -11,7 +11,7 @@
         "exitNote": ""
     },
     "output": {
-        "box": "DOES_FENCE_COVER_WORKTREE_Q",
+        "box": "Q_DOES_FENCE_COVER_WORKTREE_Q",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",
@@ -22,6 +22,6 @@
         "planFile": "",
         "exitType": "",
         "exitNote": "",
-        "next": "INIT_SUBMODULES_RECURSIVELY"
+        "next": "Q_INIT_SUBMODULES_RECURSIVELY"
     }
 }

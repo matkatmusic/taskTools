@@ -23,9 +23,9 @@ test("test_CREATE_WORKTREE_createsARealWorktreeOnTheTasksBranchWithSubmodulesPop
     claimTask(1, "run-a", root);
 
     const output = main(JSON.stringify({
-        box: "DOES_WORKTREE_EXIST_Q", scriptSignal: "continue", taskNumber: 1, runId: "run-a", projectRoot: root,
+        box: "Q_DOES_WORKTREE_EXIST_Q", scriptSignal: "continue", taskNumber: 1, runId: "run-a", projectRoot: root,
         worktree: "", branch: taskBranchName(1), docsMode: "", planFile: "", exitType: "", exitNote: "",
-        next: "CREATE_WORKTREE",
+        next: "B_CREATE_WORKTREE",
     }));
 
     assert.ok(existsSync(output.worktree));
@@ -41,9 +41,9 @@ test("test_CREATE_WORKTREE_recoversAfterBeingKilledRightAfterGitWorktreeAdd", as
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
     const packet = JSON.stringify({
-        box: "DOES_WORKTREE_EXIST_Q", scriptSignal: "continue", taskNumber: 1, runId: "run-a", projectRoot: root,
+        box: "Q_DOES_WORKTREE_EXIST_Q", scriptSignal: "continue", taskNumber: 1, runId: "run-a", projectRoot: root,
         worktree: "", branch: taskBranchName(1), docsMode: "", planFile: "", exitType: "", exitNote: "",
-        next: "CREATE_WORKTREE",
+        next: "B_CREATE_WORKTREE",
     });
 
     // Test action: kill a real child right after `git worktree add` succeeds inside CREATE_WORKTREE's own main().

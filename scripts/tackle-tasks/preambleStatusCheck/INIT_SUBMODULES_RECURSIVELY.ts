@@ -22,14 +22,14 @@ export function main(input: string): EntryPacket & { next: string } {
     if (missingFiles.length > 0) {
         return {
             ...packet,
-            box: "INIT_SUBMODULES_RECURSIVELY",
+            box: "Q_INIT_SUBMODULES_RECURSIVELY",
             scriptSignal: SCRIPT_SIGNAL.CONTINUE,
             exitType: "owned-file-missing",
             exitNote: `task ${packet.taskNumber}: modifiableFiles names ${missingFiles.join(", ")} but ${missingFiles.length === 1 ? "that file is" : "those files are"} not in the worktree at ${packet.worktree}; list each in "createsFiles" if this task creates it, or run the task that creates it first`,
-            next: "pipeline-failuresExit.mmd::FAILURES_EXIT",
+            next: "B_ADD_MISSING_FILES_TO_CREATES_FILES",
         };
     }
-    return { ...packet, box: "INIT_SUBMODULES_RECURSIVELY", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "DOCUMENT_GENERATION" };
+    return { ...packet, box: "Q_INIT_SUBMODULES_RECURSIVELY", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "B_DOCUMENT_GENERATION" };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

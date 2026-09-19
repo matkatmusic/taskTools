@@ -16,7 +16,7 @@ export function main(input: string): EntryPacket & { next: string } {
     const { taskNumber, tasksFile } = JSON.parse(input) as Input;
     const projectRoot = taskFilesProjectRoot({ tasksPath: resolve(tasksFile), completedTasksPath: "" });
     const packet: EntryPacket = {
-        box: "PREAMBLE_STATUS_CHECK",
+        box: "Q_PREAMBLE_STATUS_CHECK",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
         taskNumber,
         runId: "",
@@ -36,7 +36,7 @@ export function main(input: string): EntryPacket & { next: string } {
     // if (difficulty > 6) {
     //     return { ...packet, exitType: "too-difficult", exitNote: `difficulty ${difficulty} is above 6; run /split-task ${taskNumber}`, next: "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT" };
     // }
-    return { ...packet, next: "IS_TASK_BLOCKED_Q" };
+    return { ...packet, next: "Q_IS_TASK_BLOCKED_Q" };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

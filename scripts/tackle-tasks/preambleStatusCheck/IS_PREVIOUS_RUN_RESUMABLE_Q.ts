@@ -9,11 +9,11 @@ export function main(input: string): EntryPacket & { next: string } {
     const { next: _next, ...packet } = JSON.parse(input) as EntryPacket & { next?: string };
     const { resumable } = isTaskRunResumable(packet.taskNumber, packet.worktree, packet.runId, packet.projectRoot);
     if (resumable) {
-        return { ...packet, box: "IS_PREVIOUS_RUN_RESUMABLE_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "REBASE_RESUMED_WORKTREE_ONTO_STAGING" };
+        return { ...packet, box: "Q_IS_PREVIOUS_RUN_RESUMABLE_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING" };
     }
     return {
         ...packet,
-        box: "IS_PREVIOUS_RUN_RESUMABLE_Q",
+        box: "Q_IS_PREVIOUS_RUN_RESUMABLE_Q",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
         exitType: "not-resumable",
         exitNote: "a safe worktree holds work no run recorded a stopping point for",

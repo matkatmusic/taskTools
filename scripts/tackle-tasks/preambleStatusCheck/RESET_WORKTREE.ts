@@ -35,7 +35,7 @@ export function main(input: string): EntryPacket {
     const worktree = createFreshTaskWorktree(packet.taskNumber, packet.runId, packet.projectRoot);
     updateCurrentTaskRun(packet.taskNumber, packet.runId, { worktree, leaseRunId: packet.runId }, packet.projectRoot);
     clearResetIntent(packet.worktree);
-    return { ...packet, box: "RESET_WORKTREE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, worktree, docsMode: "AUTOGEN" };
+    return { ...packet, box: "B_RESET_WORKTREE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, worktree, docsMode: "AUTOGEN" };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

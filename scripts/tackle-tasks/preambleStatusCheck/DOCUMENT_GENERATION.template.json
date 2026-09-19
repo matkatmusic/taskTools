@@ -1,6 +1,6 @@
 {
     "input": {
-        "box": "INIT_SUBMODULES_RECURSIVELY",
+        "box": "Q_INIT_SUBMODULES_RECURSIVELY",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",
@@ -13,7 +13,7 @@
         "exitNote": ""
     },
     "output": {
-        "box": "DOCUMENT_GENERATION",
+        "box": "B_DOCUMENT_GENERATION",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",

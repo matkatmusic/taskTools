@@ -13,7 +13,7 @@ export function main(input: string): EntryPacket {
     if (active.status !== "claimed") {
         throw new Error(`task ${packet.taskNumber} could not be marked active: ${active.status}`);
     }
-    return { ...packet, box: "MARK_TASK_ACTIVE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, runId };
+    return { ...packet, box: "B_MARK_TASK_ACTIVE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, runId };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

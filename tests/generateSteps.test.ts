@@ -93,6 +93,47 @@ test("test_generateSteps_writesTheConfigAsBoxAndScriptPairs", () => {
     assert.deepEqual(Object.keys(readConfig()["one.mmd"][0]), ["box", "script", "template", "producesPrompt", "next"]);
 });
 
+test("test_generateSteps_reportsOneDeadLinkWithDiagramBlockAndTarget", () => {
+    // b.mmd draws only B and C; a.mmd's signpost names a box, GHOST, that b.mmd never draws.
+    const { diagramFolder, run } = generateFrom({
+        "a.mmd": "flowchart TD\n    A --> B\n",
+        "b.mmd": "flowchart TD\n    B --> C\n",
+    });
+    writeFileSync(join(diagramFolder, "a.mmd"), "flowchart TD\n    A --> SIGNPOST\n    SIGNPOST[\"signpost<br/>block:b.mmd::GHOST\"]\n");
+    assert.throws(run, /a\.mmd::A -> b\.mmd::GHOST/);
+});
+
+test("test_generateSteps_reportsBothDeadLinksInOneError", () => {
+    // Two signposts, each naming a box its target diagram never draws; one Error must list both.
+    const { diagramFolder, run } = generateFrom({
+        "a.mmd": "flowchart TD\n    A --> B\n",
+        "b.mmd": "flowchart TD\n    B --> C\n",
+    });
+    writeFileSync(
+        join(diagramFolder, "a.mmd"),
+        "flowchart TD\n    A --> SIGNPOST1\n    A --> SIGNPOST2\n    SIGNPOST1[\"one<br/>block:b.mmd::GHOST1\"]\n    SIGNPOST2[\"two<br/>block:b.mmd::GHOST2\"]\n",
+    );
+    assert.throws(run, (error: Error) => {
+        assert.match(error.message, /a\.mmd::A -> b\.mmd::GHOST1/);
+        assert.match(error.message, /a\.mmd::A -> b\.mmd::GHOST2/);
+        return true;
+    });
+});
+
+test("test_generateSteps_realPreambleHasNoDeadLinkKeepsExistingScriptsAndStubsTheNewOnes", () => {
+    const tempConfigPath = join(mkdtempSync(join(tmpdir(), "generate-steps-preamble-dead-link-")), "steps.json");
+    const config = narrow(generateSteps(join(PROJECT_ROOT, "diagrams/tackle-tasks"), join(PROJECT_ROOT, "scripts/tackle-tasks"), tempConfigPath, false));
+    const preambleBoxes = config["pipeline-preambleStatusCheck.mmd"]!.map(entry => entry.box);
+    assert.ok(preambleBoxes.includes("Q_PREAMBLE_STATUS_CHECK"));
+    assert.ok(preambleBoxes.includes("B_LOCK_STAGING_FOR_CATCH_UP"));
+});
+
+test("test_generateSteps_startIsTheNewPreamblesStartBlock", () => {
+    const tempConfigPath = join(mkdtempSync(join(tmpdir(), "generate-steps-preamble-start-")), "steps.json");
+    const config = generateSteps(join(PROJECT_ROOT, "diagrams/tackle-tasks"), join(PROJECT_ROOT, "scripts/tackle-tasks"), tempConfigPath, false);
+    assert.equal(config.start, "pipeline-preambleStatusCheck.mmd::Q_PREAMBLE_STATUS_CHECK");
+});
+
 test("test_getEdgesInDiagram_recordsWhatEachBoxPointsAt", () => {
     assert.deepEqual(getEdgesInDiagram("flowchart TD\n    A --> B --> C\n").next, { A: ["B"], B: ["C"], C: [] });
 });
@@ -459,18 +500,18 @@ test("test_tackleTasks_walksACustomDiagramFoldersBlocksAndNoneOfTheDefaultPipeli
     writeFileSync(join(fixtureRoot, ".taskTools/settings.json"), JSON.stringify({ diagramFolder }));
     writeFileSync(
         join(diagramFolder, "pipeline-preambleStatusCheck.mmd"),
-        "flowchart TD\n    PREAMBLE_STATUS_CHECK --> SECOND_BOX\n",
+        "flowchart TD\n    Q_PREAMBLE_STATUS_CHECK --> SECOND_BOX\n",
     );
 
     const preambleFolder = join(diagramFolder, "preambleStatusCheck");
     mkdirSync(preambleFolder, { recursive: true });
     writeFileSync(
-        join(preambleFolder, "PREAMBLE_STATUS_CHECK.ts"),
-        `console.log(JSON.stringify({ box: "PREAMBLE_STATUS_CHECK", scriptSignal: "continue", note: "PREAMBLE_STATUS_CHECK.ts for PREAMBLE_STATUS_CHECK", input: "" }));\n`,
+        join(preambleFolder, "preambleStatusCheck.ts"),
+        `console.log(JSON.stringify({ box: "Q_PREAMBLE_STATUS_CHECK", scriptSignal: "continue", note: "preambleStatusCheck.ts for Q_PREAMBLE_STATUS_CHECK", input: "" }));\n`,
     );
     writeFileSync(
-        join(preambleFolder, "PREAMBLE_STATUS_CHECK.template.json"),
-        `${JSON.stringify({ input: {}, output: { box: "PREAMBLE_STATUS_CHECK", scriptSignal: "continue", note: "PREAMBLE_STATUS_CHECK.ts for PREAMBLE_STATUS_CHECK", input: "" } }, null, 4)}\n`,
+        join(preambleFolder, "preambleStatusCheck.template.json"),
+        `${JSON.stringify({ input: {}, output: { box: "Q_PREAMBLE_STATUS_CHECK", scriptSignal: "continue", note: "preambleStatusCheck.ts for Q_PREAMBLE_STATUS_CHECK", input: "" } }, null, 4)}\n`,
     );
 
     const secondBoxFolder = join(diagramFolder, "pipeline-preambleStatusCheck");
@@ -488,7 +529,7 @@ test("test_tackleTasks_walksACustomDiagramFoldersBlocksAndNoneOfTheDefaultPipeli
     skillBody("999999", fixtureRoot);
 
     const runLogPath = join(fixtureRoot, "run-log.json");
-    const command = `/run-step pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK ${JSON.stringify({ taskNumber: 999999, tasksFile: join(fixtureRoot, ".taskTools/tasks.json") })}`;
+    const command = `/run-step pipeline-preambleStatusCheck.mmd::Q_PREAMBLE_STATUS_CHECK ${JSON.stringify({ taskNumber: 999999, tasksFile: join(fixtureRoot, ".taskTools/tasks.json") })}`;
     execFileSync("node", ["--no-inspect", join(PROJECT_ROOT, "scripts/hooks/runStepHook.ts")], {
         encoding: "utf8",
         input: JSON.stringify({ hook_event_name: "SubagentStart", prompt: command }),
@@ -497,7 +538,7 @@ test("test_tackleTasks_walksACustomDiagramFoldersBlocksAndNoneOfTheDefaultPipeli
 
     const runLog = JSON.parse(readFileSync(runLogPath, "utf8")) as Array<{ block: string }>;
     assert.deepEqual(runLog.map(entry => entry.block), [
-        "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK",
+        "pipeline-preambleStatusCheck.mmd::Q_PREAMBLE_STATUS_CHECK",
         "pipeline-preambleStatusCheck.mmd::SECOND_BOX",
     ]);
 });

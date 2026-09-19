@@ -1,6 +1,6 @@
 {
     "input": {
-        "box": "IS_TASK_BLOCKED_Q",
+        "box": "Q_IS_TASK_BLOCKED_Q",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "",
@@ -13,7 +13,7 @@
         "exitNote": ""
     },
     "output": {
-        "box": "IS_TASK_ACTIVE_Q",
+        "box": "Q_IS_TASK_ACTIVE_Q",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "",
@@ -24,6 +24,6 @@
         "planFile": "",
         "exitType": "",
         "exitNote": "",
-        "next": "PREFLIGHT_OK_Q"
+        "next": "Q_PREFLIGHT_OK_Q"
     }
 }

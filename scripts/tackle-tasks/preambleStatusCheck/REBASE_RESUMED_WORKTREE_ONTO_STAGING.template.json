@@ -1,6 +1,6 @@
 {
     "input": {
-        "box": "IS_PREVIOUS_RUN_RESUMABLE_Q",
+        "box": "Q_IS_PREVIOUS_RUN_RESUMABLE_Q",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",
@@ -13,7 +13,7 @@
         "exitNote": ""
     },
     "output": {
-        "box": "REBASE_RESUMED_WORKTREE_ONTO_STAGING",
+        "box": "Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",
@@ -31,6 +31,6 @@
         "conflictedFilePaths": [""],
         "failureReason": "",
         "returnTo": "",
-        "next": "DOES_FENCE_COVER_WORKTREE_Q"
+        "next": "Q_DOES_FENCE_COVER_WORKTREE_Q"
     }
 }

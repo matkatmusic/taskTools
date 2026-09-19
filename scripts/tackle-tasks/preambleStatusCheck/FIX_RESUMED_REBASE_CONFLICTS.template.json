@@ -1,0 +1,9 @@
+{
+    "input": {},
+    "output": {
+        "box": "B_FIX_RESUMED_REBASE_CONFLICTS",
+        "scriptSignal": "continue",
+        "note": "FIX_RESUMED_REBASE_CONFLICTS.ts for B_FIX_RESUMED_REBASE_CONFLICTS",
+        "input": ""
+    }
+}

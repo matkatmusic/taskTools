@@ -1,6 +1,6 @@
 {
     "input": {
-        "box": "IS_TASK_ACTIVE_Q",
+        "box": "Q_IS_TASK_ACTIVE_Q",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "",
@@ -13,7 +13,7 @@
         "exitNote": ""
     },
     "output": {
-        "box": "MARK_TASK_ACTIVE",
+        "box": "B_MARK_TASK_ACTIVE",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",

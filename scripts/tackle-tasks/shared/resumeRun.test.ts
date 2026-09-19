@@ -294,7 +294,7 @@ test("test_findResumeEntry_resumesAtResetWorktreeAfterAKillRightAfterDeletingThe
 
     // Verification: it resumes at RESET_WORKTREE instead of abandoning the run.
     assert.notEqual(entry, null);
-    assert.equal(entry!.block, "pipeline-preambleStatusCheck.mmd::RESET_WORKTREE");
+    assert.equal(entry!.block, "pipeline-preambleStatusCheck.mmd::B_RESET_WORKTREE");
     const input = JSON.parse(entry!.input);
     assert.equal(input.taskNumber, taskNumber);
     assert.equal(input.runId, runId);

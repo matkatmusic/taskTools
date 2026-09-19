@@ -34,14 +34,14 @@ test("test_DOCUMENT_GENERATION_writesTheBriefInAutogenMode", () => {
     const group: TaskGroup = { groupId: 9, taskNumbers: [9], filePaths: [], scope: "declared" };
     const worktreePath = createWorktreeForGroup(repoRoot, group);
     const packet = {
-        box: "INIT_SUBMODULES_RECURSIVELY", scriptSignal: "continue", taskNumber: 9, runId: "run-a",
+        box: "Q_INIT_SUBMODULES_RECURSIVELY", scriptSignal: "continue", taskNumber: 9, runId: "run-a",
         projectRoot: repoRoot, worktree: worktreePath, branch: "task-9", docsMode: "AUTOGEN",
         planFile: "", exitType: "", exitNote: "",
     };
 
     const output = main(JSON.stringify(packet));
 
-    assert.deepEqual(output, { ...packet, box: "DOCUMENT_GENERATION", scriptSignal: "continue" });
+    assert.deepEqual(output, { ...packet, box: "B_DOCUMENT_GENERATION", scriptSignal: "continue" });
     assert.ok(existsSync(join(worktreePath, "plans", "brief-9.md")));
 });
 
@@ -51,15 +51,15 @@ test("test_DOCUMENT_GENERATION_writesTheBriefInUpdateMode", () => {
     const group: TaskGroup = { groupId: 9, taskNumbers: [9], filePaths: [], scope: "declared" };
     const worktreePath = createWorktreeForGroup(repoRoot, group);
     const packet = {
-        box: "DOES_FENCE_COVER_WORKTREE_Q", scriptSignal: "continue", taskNumber: 9, runId: "run-a",
+        box: "Q_DOES_FENCE_COVER_WORKTREE_Q", scriptSignal: "continue", taskNumber: 9, runId: "run-a",
         projectRoot: repoRoot, worktree: worktreePath, branch: "task-9", docsMode: "UPDATE",
-        planFile: "", exitType: "", exitNote: "", next: "INIT_SUBMODULES_RECURSIVELY",
+        planFile: "", exitType: "", exitNote: "", next: "Q_INIT_SUBMODULES_RECURSIVELY",
     };
 
     const output = main(JSON.stringify(packet));
 
     const { next: _next, ...expected } = packet;
-    assert.deepEqual(output, { ...expected, box: "DOCUMENT_GENERATION", scriptSignal: "continue" });
+    assert.deepEqual(output, { ...expected, box: "B_DOCUMENT_GENERATION", scriptSignal: "continue" });
     assert.ok(existsSync(join(worktreePath, "plans", "brief-9.md")));
 });
 
@@ -69,7 +69,7 @@ test("test_DOCUMENT_GENERATION_runsTwiceWithTheSameInput", () => {
     const group: TaskGroup = { groupId: 9, taskNumbers: [9], filePaths: [], scope: "declared" };
     const worktreePath = createWorktreeForGroup(repoRoot, group);
     const input = JSON.stringify({
-        box: "INIT_SUBMODULES_RECURSIVELY", scriptSignal: "continue", taskNumber: 9, runId: "run-a",
+        box: "Q_INIT_SUBMODULES_RECURSIVELY", scriptSignal: "continue", taskNumber: 9, runId: "run-a",
         projectRoot: repoRoot, worktree: worktreePath, branch: "task-9", docsMode: "AUTOGEN",
         planFile: "", exitType: "", exitNote: "",
     });
@@ -86,7 +86,7 @@ test("test_DOCUMENT_GENERATION_runsTwiceWithTheSameInput", () => {
 
 test("test_DOCUMENT_GENERATION_throwsOnAnUnknownDocsMode", () => {
     const packet = {
-        box: "INIT_SUBMODULES_RECURSIVELY", scriptSignal: "continue", taskNumber: 9, runId: "run-a",
+        box: "Q_INIT_SUBMODULES_RECURSIVELY", scriptSignal: "continue", taskNumber: 9, runId: "run-a",
         projectRoot: "/tmp/unused", worktree: "/tmp/unused-worktree", branch: "task-9", docsMode: "",
         planFile: "", exitType: "", exitNote: "",
     };

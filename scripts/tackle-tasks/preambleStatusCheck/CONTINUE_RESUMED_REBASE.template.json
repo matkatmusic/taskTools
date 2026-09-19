@@ -1,0 +1,9 @@
+{
+    "input": {},
+    "output": {
+        "box": "Q_CONTINUE_RESUMED_REBASE",
+        "scriptSignal": "continue",
+        "note": "CONTINUE_RESUMED_REBASE.ts for Q_CONTINUE_RESUMED_REBASE",
+        "input": ""
+    }
+}

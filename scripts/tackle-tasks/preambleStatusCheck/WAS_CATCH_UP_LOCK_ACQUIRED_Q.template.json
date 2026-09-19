@@ -1,0 +1,9 @@
+{
+    "input": {},
+    "output": {
+        "box": "Q_WAS_CATCH_UP_LOCK_ACQUIRED_Q",
+        "scriptSignal": "continue",
+        "note": "WAS_CATCH_UP_LOCK_ACQUIRED_Q.ts for Q_WAS_CATCH_UP_LOCK_ACQUIRED_Q",
+        "input": ""
+    }
+}

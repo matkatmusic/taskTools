@@ -15,9 +15,9 @@ function makeProjectRoot(tasks: unknown[]): string {
 
 function packet(taskNumber: number, runId: string, projectRoot: string): string {
     return JSON.stringify({
-        box: "IS_WORKTREE_SAFE_TO_USE_Q", scriptSignal: "continue", taskNumber, runId, projectRoot,
+        box: "Q_IS_WORKTREE_SAFE_TO_USE_Q", scriptSignal: "continue", taskNumber, runId, projectRoot,
         worktree: "", branch: `task-${taskNumber}`, docsMode: "", planFile: "", exitType: "", exitNote: "",
-        next: "TAKE_WORKTREE_LEASE_BEFORE_RESET",
+        next: "B_TAKE_WORKTREE_LEASE_BEFORE_RESET",
     });
 }
 
@@ -25,7 +25,7 @@ test("test_TAKE_WORKTREE_LEASE_BEFORE_RESET_passesThroughUnchangedWhenNoWorktree
     const root = makeProjectRoot([{ taskNumber: 1, title: "t1", files: [] }]);
     claimTask(1, "run-a", root);
     const output = main(packet(1, "run-a", root));
-    assert.equal(output.box, "TAKE_WORKTREE_LEASE_BEFORE_RESET");
+    assert.equal(output.box, "B_TAKE_WORKTREE_LEASE_BEFORE_RESET");
     assert.equal(readTaskRunState(1, root).worktree, null);
 });
 
