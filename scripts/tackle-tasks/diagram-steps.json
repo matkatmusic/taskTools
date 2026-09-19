@@ -656,8 +656,16 @@
             "template": "scripts/tackle-tasks/preambleStatusCheck/MARK_TASK_ACTIVE.template.json",
             "producesPrompt": false,
             "next": [
-                "Q_DOES_WORKTREE_EXIST_Q"
+                "Q_DOES_WORKTREE_EXIST_Q",
+                "B_PROVE_SPLICE_DEMO"
             ]
+        },
+        {
+            "box": "B_PROVE_SPLICE_DEMO",
+            "script": "scripts/tackle-tasks/pipeline-preambleStatusCheck/proveSpliceDemo.ts",
+            "template": "scripts/tackle-tasks/pipeline-preambleStatusCheck/proveSpliceDemo.template.json",
+            "producesPrompt": false,
+            "next": []
         },
         {
             "box": "B_RESET_WORKTREE",
