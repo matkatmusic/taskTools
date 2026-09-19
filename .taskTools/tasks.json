@@ -1453,5 +1453,50 @@
         "reason": "chain order: [launch 2] comes before [launch 3]"
       }
     ]
+  },
+  {
+    "taskNumber": 243,
+    "version": "5fe173795e6a4626e94cfc4ec75855ee4b241a9c",
+    "title": "[launch 4] The generator reads a diagrams.json file in each diagram folder",
+    "userDescription": "4. The generator reads a `diagrams.json` file in each diagram folder to learn which diagram files belong to that folder.\n   WHY: two folders can then name the same file, so a shared diagram exists one time only and cannot drift.\n   HOW: `diagrams.json` is an array of paths relative to its folder. `getDiagramFileNames` (`generateSteps.ts:221-223`) reads the array. The `readdirSync` scan is commented out. A path that does not exist throws. One test: two folders name one shared file, and both get its blocks.\n\nUser ruling (2026-09-18): `getDiagramFileNames` (`generateSteps.ts:221-223`) must keep returning bare basenames (e.g. `pipeline-preambleStatusCheck.mmd`), never a raw diagrams.json path like `../shared/x.mmd`. Reason: hardcoded diagram-file keys assume bare names: `START_STEP_KEY` and `FAILURES_EXIT_KEY` (`scripts/hooks/runStepHook.ts:72-73`), `EXIT_DIAGRAMS` (line 76), `NEXT_BLOCK_OVERRIDES`/`TRANSLATOR_OVERRIDES` keys (`scripts/tackle-tasks/generateSteps.ts:16-22`), the top-level keys of `diagram-steps.json`, `START_STEP` (`scripts/tackle-tasks/generateWorkflow.ts:12`), and `rebaseBlockKey` (`scripts/tackle-tasks/resetTask.ts:423`). Add a basename-to-declared-path lookup built from diagrams.json, so `readFileSync(join(diagramFolder, diagramFile))` in `parseDiagrams` (`generateSteps.ts:251`) still resolves a shared file outside diagramFolder, while every other consumer sees the bare name.",
+    "chainGoal": [
+      "A tackle-tasks launch reaches the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet. The chain is [launch 1] to [launch 22] from specs/launch-reaches-planning-alone.md."
+    ],
+    "goal": [
+      "- `getDiagramFileNames` reads a `diagrams.json` array in its folder instead of scanning the folder with `readdirSync`, and still returns bare `.mmd` basenames only, confirmed by the new tests below passing.",
+      "- A `diagrams.json` entry naming a path that does not exist on disk makes `getDiagramFileNames` throw, confirmed by a new test.",
+      "- Two diagram folders whose `diagrams.json` both name one shared `.mmd` file each get that file's blocks in their own generated config, confirmed by a new test.",
+      "- `node --test tests/generateSteps.test.ts scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts` passes.",
+      "- `npm run steps` still regenerates `scripts/tackle-tasks/diagram-steps.json` with no diagram dropped, now that `diagrams/tackle-tasks/` and `diagrams/tackle-tasks-fast/` each carry a `diagrams.json`, with the command run and its output pasted."
+    ],
+    "notInScope": [
+      "- Moving any diagram file into `diagrams/shared/`, or pointing a real `diagrams.json` entry at a path outside its own folder: that dedup is [launch 5]'s job.",
+      "- A dead-link guard that finds a rename target inside a diagram: that is [mermaid 11].",
+      "- Any change to the `folder:<dir>` custom-diagram-folder CLI slot: that is [mermaid 10]."
+    ],
+    "problemSolvedByTask": "Today a diagram folder's file list comes from scanning the folder with readdirSync, so the same diagram file cannot be named by two folders without a byte-for-byte copy that can drift. Reading a folder's own diagrams.json array instead lets [launch 5] point two folders at one shared file with no duplication.",
+    "description": "getDiagramFileNames in scripts/tackle-tasks/generateSteps.ts currently returns every non-underscore .mmd basename in a diagramFolder via readdirSync; this task comments that scan out and replaces it with a read of a new diagrams.json file inside that folder (an array of paths relative to the folder). A listed path that does not exist on disk throws by letting readFileSync/existsSync fail naturally, with no added try/catch. The function still returns bare basenames only, even when a diagrams.json entry is a relative path like ../shared/x.mmd, because every existing consumer (the start-step and failures-exit key literals and EXIT_DIAGRAMS in scripts/hooks/runStepHook.ts, the NEXT_BLOCK_OVERRIDES/TRANSLATOR_OVERRIDES records in generateSteps.ts itself, the top-level keys of diagram-steps.json, START_STEP in generateWorkflow.ts, and the rebase block key in resetTask.ts) assumes a bare name. A new basename-to-declared-path lookup, built once from diagrams.json inside parseDiagrams, lets its readFileSync resolve a shared file that lives outside diagramFolder while every other caller keeps seeing the bare basename. No diagrams.json file exists anywhere in the repo yet, so diagrams/tackle-tasks/ (19 non-underscore .mmd files, excluding the spec-only _pipeline-monolith.mmd) and diagrams/tackle-tasks-fast/ (14 .mmd files) each need one listing their current files by bare name, or resolveDiagramFolderSetting's existing default-pipeline and fast-pipeline branches start throwing. Confirmed in the mermaid worktree: two test fixtures build ad-hoc diagram folders with no diagrams.json and would otherwise break once the readdirSync scan is gone. tests/generateSteps.test.ts's shared generateFrom(diagrams) helper, used by roughly 28 tests, needs to also write a diagrams.json listing the .mmd keys it was given; three more of that file's tests build a diagram folder by hand outside that helper and need a diagrams.json added directly. scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts's two custom-diagram-folder tests build a diagram folder by hand and likewise need a diagrams.json added. tests/blockReset/*.test.ts and scripts/tackle-tasks/resetTask.test.ts are unaffected: they all call resolveDiagramFolderSetting with no custom settings.json, so they resolve to the real diagrams/tackle-tasks/ folder, which this task already gives a diagrams.json.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/generateSteps.ts",
+      "tests/generateSteps.test.ts",
+      "scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "createsFiles": [
+      "diagrams/tackle-tasks/diagrams.json",
+      "diagrams/tackle-tasks-fast/diagrams.json"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "test_getDiagramFileNames_readsDiagramsJsonInsteadOfScanningTheFolder: in a temp folder, write diagrams.json as the array [\"one.mmd\", \"two.mmd\"], write one.mmd and two.mmd, and also write a third file three.mmd that is NOT listed in diagrams.json. Expect getDiagramFileNames(folder) to return exactly [\"one.mmd\", \"two.mmd\"] (three.mmd excluded), proving it reads the array and not the directory listing.\ntest_getDiagramFileNames_throwsWhenADiagramsJsonPathDoesNotExist: in a temp folder, write diagrams.json as [\"missing.mmd\"] and do not create missing.mmd. Expect getDiagramFileNames(folder) to throw.\ntest_getDiagramFileNames_returnsBareBasenamesForASharedPath: in a temp folder pair <root>/a/ and <root>/shared/, write <root>/shared/shared.mmd, and write <root>/a/diagrams.json as [\"../shared/shared.mmd\"]. Expect getDiagramFileNames(\"<root>/a\") to return exactly [\"shared.mmd\"], not \"../shared/shared.mmd\".\ntest_generateSteps_twoDiagramFoldersShareOneFileAndBothGetItsBlocks: in a temp folder, write <root>/shared/shared.mmd as \"flowchart TD\\n    A --> B\\n\", write <root>/folderA/diagrams.json and <root>/folderB/diagrams.json each as [\"../shared/shared.mmd\"], then call generateSteps(join(root,\"folderA\"), stepsRootA, configPathA) and generateSteps(join(root,\"folderB\"), stepsRootB, configPathB) separately. Expect both returned configs to have the single top-level key \"shared.mmd\" (not \"../shared/shared.mmd\"), and config[\"shared.mmd\"].map(entry => entry.box) to equal [\"A\", \"B\"] in both runs.\nUpdate tests/generateSteps.test.ts's generateFrom(diagrams) helper to also writeFileSync a diagrams.json in the diagram folder, containing JSON.stringify(Object.keys(diagrams).filter(name => name.endsWith(\".mmd\")).sort()), so every existing test that goes through generateFrom keeps passing unmodified.\nAdd a diagrams.json (listing that test's own .mmd file names) next to every diagram folder that tests/generateSteps.test.ts and scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts build by hand instead of through generateFrom, so none of those existing tests newly throw once the readdirSync scan is commented out.",
+    "difficulty": 6,
+    "blockedBy": [
+      {
+        "taskNumber": 242,
+        "reason": "chain order: [launch 3] comes before [launch 4]"
+      }
+    ]
   }
 ]
