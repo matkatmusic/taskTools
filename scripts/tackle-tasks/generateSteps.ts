@@ -283,6 +283,23 @@ function remapNextAcrossDiagrams(diagramFile: string, next: Record<string, strin
   return remapped;
 }
 
+// A Q_CHOICE_ node is not a block; its own next target replaces it in its parent decision's next list.
+function foldChoiceTargetsIntoNext(next: Record<string, string[]>): Record<string, string[]> {
+  const folded: Record<string, string[]> = {};
+  for (const [box, targets] of Object.entries(next)) {
+    folded[box] = [];
+    for (const target of targets) {
+      const isChoiceNode = target.startsWith("Q_CHOICE_");
+      if (isChoiceNode) {
+        folded[box]!.push(...next[target]!);
+        continue;
+      }
+      folded[box]!.push(target);
+    }
+  }
+  return folded;
+}
+
 // A stray stub script means a rename; one in the wrong folder means a move.
 function assertNoOrphanBoxScripts(stepsRoot: string, allBoxNames: Set<string>, getOwnerFolder: (box: string) => string): void {
   if (!existsSync(stepsRoot)) {
@@ -349,9 +366,13 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
   const newTemplatePaths = new Set<string>();
   const config: StepConfig = {};
   for (const [diagramFile, data] of parsedDiagrams) {
-    const remappedNext = remapNextAcrossDiagrams(diagramFile, data.next, parsedDiagrams);
+    const remappedNext = remapNextAcrossDiagrams(diagramFile, foldChoiceTargetsIntoNext(data.next), parsedDiagrams);
     const entries: StepConfigEntry[] = [];
     for (const box of data.boxes) {
+      // A Q_CHOICE_ node is not a block; its target already landed in its parent decision's next list.
+      if (box.startsWith("Q_CHOICE_")) {
+        continue;
+      }
       // A dashed box only points into another diagram; that diagram holds the step.
       if (data.next[box]!.length === 0 && getDiagramWhereBoxHasArrows(box, parsedDiagrams, diagramFile) !== undefined) {
         continue;

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -436,4 +436,27 @@ test("test_generateSteps_leavesTheTranslatorOverrideOffOutsideTheDefaultDiagramF
     const { config } = generateFrom({ "pipeline-preambleStatusCheck.mmd": "flowchart TD\n    PREAMBLE_STATUS_CHECK --> SECOND_BOX\n" });
     const preambleEntry = config["pipeline-preambleStatusCheck.mmd"]!.find(candidate => candidate.box === "PREAMBLE_STATUS_CHECK")!;
     assert.equal(preambleEntry.translator, undefined);
+});
+
+test("test_generateSteps_foldsAQChoiceTargetIntoTheDecisionsNext", () => {
+    const { config, stepsRoot } = generateFrom({
+        "one.mmd": "flowchart TD\n    Q_DECISION --> Q_CHOICE_DECISION_Y\n    Q_CHOICE_DECISION_Y --> B_YES\n    Q_DECISION --> Q_CHOICE_DECISION_N\n    Q_CHOICE_DECISION_N --> B_NO\n",
+    });
+    assert.deepEqual(config["one.mmd"]!.map(entry => entry.box), ["Q_DECISION", "B_YES", "B_NO"]);
+    assert.deepEqual(config["one.mmd"]!.find(entry => entry.box === "Q_DECISION")!.next, ["B_YES", "B_NO"]);
+    assert.equal(existsSync(join(stepsRoot, "one/Q_CHOICE_DECISION_Y.ts")), false);
+    assert.equal(existsSync(join(stepsRoot, "one/Q_CHOICE_DECISION_Y.template.json")), false);
+    assert.equal(existsSync(join(stepsRoot, "one/Q_CHOICE_DECISION_N.ts")), false);
+    assert.equal(existsSync(join(stepsRoot, "one/Q_CHOICE_DECISION_N.template.json")), false);
+});
+
+test("test_generateSteps_keepsThePrefixInTheBoxName", () => {
+    const { config } = generateFrom({ "one.mmd": "flowchart TD\n    B_LOCK_SOURCE_REPO --> B_NEXT\n" });
+    assert.deepEqual(config["one.mmd"]!.map(entry => entry.box), ["B_LOCK_SOURCE_REPO", "B_NEXT"]);
+});
+
+test("test_generateSteps_stillParsesAPlainIdDiagram", () => {
+    const { config } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
+    assert.deepEqual(config["one.mmd"]!.map(entry => entry.box), ["A", "B"]);
+    assert.deepEqual(config["one.mmd"]!.find(entry => entry.box === "A")!.next, ["B"]);
 });
