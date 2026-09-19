@@ -237,7 +237,13 @@ function seedInputTemplatesFromPredecessors(config: StepConfig, newTemplatePaths
 
 function getTemplatePathForStepKey(config: StepConfig, stepKey: string): string | undefined {
   const [diagramFile = "", box = ""] = stepKey.split("::");
-  return config[diagramFile]?.find(entry => entry.box === box)?.template;
+  for (const entry of config[diagramFile] ?? []) {
+    const isMatchingBox = entry.box === box;
+    if (isMatchingBox) {
+      return entry.template;
+    }
+  }
+  return undefined;
 }
 
 // The mutating flag is hand-written, so regenerating from the arrows must not drop it.
