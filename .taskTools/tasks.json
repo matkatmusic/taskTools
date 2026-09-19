@@ -951,5 +951,42 @@
         "reason": "chain order: [mermaid 12] comes before [mermaid 13]"
       }
     ]
+  },
+  {
+    "taskNumber": 229,
+    "version": "b9d015b392354380f434b98bf4bb9fdabe3cb77c",
+    "title": "[mermaid 14] Prove the splice",
+    "userDescription": "14. WHAT: Prove the splice.\n   WHY: this is the goal, shown once by hand.\n   HOW: One new block is added to the preamble diagram by drawing it only; the generator is run; the `file:` line, the stub, and the entry appear; the pipeline starts a task and reaches the block, and the block throws \"not implemented\".\n\nUser ruling (2026-09-18): files is `diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd` (the same file [mermaid 11] replaces). createsFiles is the generator-written stub `.ts` and its `.template.json` for one demo block, e.g. `B_PROVE_SPLICE_DEMO` (file name per [mermaid 5]'s camelCase rule, path repo-root-relative per [mermaid 4]). Run `npm run steps` (`node scripts/tackle-tasks/generateSteps.ts && node scripts/tackle-tasks/generateWorkflow.ts`); only the generateSteps half matters here, since `/run-step` reads `scripts/tackle-tasks/diagram-steps.json` directly. Then reach the block via `/run-step` on any open task. hasTests is false: this is a one-time proof by hand, not an automated test.",
+    "chainGoal": [
+      "The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone. The chain is [mermaid 1] to [mermaid 15] from specs/diagrams-in-mermaid-viewer-format.md."
+    ],
+    "goal": [
+      "- `diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd` has one new block drawn by hand, with no `file:` line of its own, added on top of what [mermaid 11] replaced it with.",
+      "- After `npm run steps`, the new block's entry in `scripts/tackle-tasks/diagram-steps.json` has a generator-filled `file:`/`script` value, and its stub `.ts` and `.template.json` exist on disk, both written by the generator, not by hand.",
+      "- Running `/run-step` on any open task and reaching the new block prints `block <name> in <diagram> is not implemented`, with the command and its pasted output."
+    ],
+    "notInScope": [
+      "- Wiring the new demo block into the live pipeline route: it exists only to prove the splice, and is left disconnected once proven.",
+      "- Filling in the stub's real logic: per [mermaid 5], a stub always throws until someone implements it; the throw is the proof, not a defect.",
+      "- Running `generateWorkflow.ts`'s half of `npm run steps`: only the `generateSteps.ts` half matters, since `/run-step` reads `scripts/tackle-tasks/diagram-steps.json` directly."
+    ],
+    "problemSolvedByTask": "This is the chain's own stated goal, shown once by hand: proof that a new block can be spliced into the pipeline by an edit to the diagram alone, with no generator or pipeline code touched for that block.",
+    "description": "This is a one-time proof by hand, not an automated test: hasTests is false. One new block, e.g. B_PROVE_SPLICE_DEMO, is drawn into diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd, the same file [mermaid 11] replaces, with no file: line of its own. Running npm run steps regenerates scripts/tackle-tasks/diagram-steps.json: per [mermaid 5], the generator fills in the missing file: line and writes the block's stub .ts and its .template.json. [mermaid 5] decides the stub path (its owner folder and the blockNameAsCamelCase file name) and that logic has not landed in this worktree yet, so the exact path the generator writes into the new file: line cannot be predicted here; it is read back from the regenerated diagram-steps.json entry after running npm run steps, not chosen in advance, and createsFiles is left empty for that reason. Only the generateSteps half of npm run steps matters, since /run-step reads scripts/tackle-tasks/diagram-steps.json directly rather than any output of generateWorkflow.ts. Reaching the new block through /run-step on any open task must throw the stub's standard \"block <name> in <diagram> is not implemented\" message, proving the diagram edit alone drove the splice.",
+    "modifiableFiles": [
+      "diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 2,
+    "blockedBy": [
+      {
+        "taskNumber": 228,
+        "reason": "chain order: [mermaid 13] comes before [mermaid 14]"
+      }
+    ]
   }
 ]
