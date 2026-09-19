@@ -1172,5 +1172,43 @@
         "reason": "chain order: [folder 3] comes before [folder 4]"
       }
     ]
+  },
+  {
+    "taskNumber": 235,
+    "version": "03275a6af1016e6724f9571b42e79596469b6c71",
+    "title": "[folder 5] Point the merge tool's shared folder at staging, never the user's branch",
+    "userDescription": "5. The merge tool checks out `staging` in the shared `awaitingTesting` folder, never the user's branch.\n   WHY: `runMergeCli` at `mergeTaskWorktrees.ts:888,895` passes `parentSource.sourceBranch`, the user's current branch. That put the folder on `develop` on 2026-09-14.\n   HOW: comment out the two lines and write them again with `\"staging\"` for both `ensureStagingWorktree` and `mergeGroupBranchIntoRepo`. `MERGE_WORKTREES.ts:17-20` already passes `\"staging\"`. Add one test in `tests/mergeTaskWorktrees.test.ts` that runs the `--merge` CLI from a repo on the user's current branch and expects the shared folder on `staging`.",
+    "chainGoal": [
+      "When a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it. The chain is [folder 1] to [folder 9] from specs/awaiting-testing-folder.md."
+    ],
+    "goal": [
+      "- `sed -n '883,896p' scripts/merge-worktree-tasks/mergeTaskWorktrees.ts` shows `runMergeCli` passing the literal `\"staging\"` to both `ensureStagingWorktree` and `mergeGroupBranchIntoRepo`, with the old `parentSource.sourceBranch` argument commented out (not deleted), with the command run and its output pasted.",
+      "- `node --test tests/mergeTaskWorktrees.test.ts` passes, including a new test that runs the `--merge` CLI from a repo whose current branch is not `staging` and asserts the shared `awaitingTesting` folder ends up checked out on `staging`.",
+      "- `node --test scripts/tackle-tasks/runFullSuite/MERGE_WORKTREES.test.ts` still passes, confirming the pipeline's own merge step, which already hardcodes `\"staging\"` the same way, is unaffected."
+    ],
+    "notInScope": [
+      "- any use of `parentSource.sourceBranch` outside `runMergeCli`'s two calls: not touched by this item",
+      "- removing the pre-existing `staging`-named folder from disk: owned by [folder 4]",
+      "- the merge brief's wording about which branch the work lands on: owned by [folder 6]"
+    ],
+    "problemSolvedByTask": "`runMergeCli` passes `parentSource.sourceBranch`, the user's current branch, to `ensureStagingWorktree` and `mergeGroupBranchIntoRepo`, so the shared folder ends up checked out on whatever branch the user happened to be on; that put the folder on `develop` on 2026-09-14 instead of always landing on `staging`.",
+    "description": "runMergeCli in scripts/merge-worktree-tasks/mergeTaskWorktrees.ts calls collectRepositorySources(repoRoot, \"staging\"), but collectRepositorySources in scripts/shared/repositoryBranches.ts sets the parent path's sourceBranch to whatever branch is currently checked out in repoRoot, ignoring the rootBranch string passed in. So parentSource.sourceBranch is really the user's own branch, and runMergeCli forwards it to both ensureStagingWorktree and mergeGroupBranchIntoRepo, checking the shared folder out onto that branch instead of staging. MERGE_WORKTREES.ts already fixes the same class of bug for the pipeline's own merge step: its baseBranch function comments out a git rev-parse call and returns the literal \"staging\" instead, and this task follows that exact pattern for the two call sites inside runMergeCli. Only those two argument expressions change; parentSource.sourceBranch itself, collectRepositorySources, and every other caller are untouched.",
+    "modifiableFiles": [
+      "scripts/merge-worktree-tasks/mergeTaskWorktrees.ts",
+      "tests/mergeTaskWorktrees.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "New test in tests/mergeTaskWorktrees.test.ts, e.g. test_runMergeCli_checksOutTheSharedFolderOntoStagingNeverTheUsersBranch: build a temp repo with the existing makeTempRepoWithCommit() helper, create a branch named \"staging\" on it, then checkout a different branch named \"develop\" as the repo's current branch (this is the user's branch the CLI must not use). Build a task worktree/group for that repo with the existing makeGroup helper. Run `execFileSync(\"node\", [\"--no-inspect\", SCRIPT, \"--merge\", worktree], { cwd: repoRoot, encoding: \"utf8\" })`. After the call, assert that `git(stagingWorktreePath(repoRoot), \"branch\", \"--show-current\")` equals the exact string \"staging\", not \"develop\".",
+    "difficulty": 4,
+    "blockedBy": [
+      {
+        "taskNumber": 234,
+        "reason": "chain order: [folder 4] comes before [folder 5]"
+      }
+    ]
   }
 ]
