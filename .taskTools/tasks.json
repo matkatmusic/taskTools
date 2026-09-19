@@ -1059,5 +1059,44 @@
         "reason": "chain order: [mermaid 15] comes before [folder 1]"
       }
     ]
+  },
+  {
+    "taskNumber": 232,
+    "version": "0846dba4cbc51e17681c1ccd39fe24e0bde8d525",
+    "title": "[folder 2] Rename the shared checkout folder to awaitingTesting",
+    "userDescription": "2. The shared checkout folder is named `awaitingTesting`.\n   WHY: the folder and the branch share the word `staging` today, so people and code mix them up.\n   HOW: comment out the `join(..., \"staging\")` return at `stagingWorktree.ts:12` and return `join(..., \"awaitingTesting\")`. Add one test in `scripts/tackle-tasks/shared/stagingWorktree.test.ts` that checks the basename of `stagingWorktreePath()`. No test hard-codes the folder name as a path part.",
+    "chainGoal": [
+      "When a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it. The chain is [folder 1] to [folder 9] from specs/awaiting-testing-folder.md."
+    ],
+    "goal": [
+      "- `node --test scripts/tackle-tasks/shared/stagingWorktree.test.ts` passes, including a new test that asserts `basename(stagingWorktreePath(repo))` equals the exact string `\"awaitingTesting\"`.",
+      "- `rg -n 'return join\\(.*\"awaitingTesting\"\\)' scripts/tackle-tasks/shared/stagingWorktree.ts` matches the live return line.",
+      "- `rg -n 'return join\\(.*\"staging\"\\)' scripts/tackle-tasks/shared/stagingWorktree.ts` matches nothing live (only inside a `//` comment), confirming the old return is commented out, not deleted.",
+      "- `node --test scripts/tackle-tasks/commitImplementationIfNeeded/COMMIT_IMPLEMENTATION_IF_NEEDED.test.ts` still passes, confirming an existing caller of `stagingWorktreePath` needed no change."
+    ],
+    "notInScope": [
+      "- rebuilding a folder that is on the wrong branch: owned by [folder 3]",
+      "- removing the pre-existing `staging`-named folder that already sits on disk: owned by [folder 4]",
+      "- pointing the merge tool at the `staging` branch: owned by [folder 5]"
+    ],
+    "problemSolvedByTask": "The folder and the branch share the word `staging` today, so people and code mix them up. Renaming the folder to `awaitingTesting` keeps `staging` meaning only the branch.",
+    "description": "stagingWorktreePath in scripts/tackle-tasks/shared/stagingWorktree.ts is the sole place that names the shared checkout folder; it returns join(resolveTaskWorktreeConventionDirectory(projectRoot), \"staging\") today. Every caller (mergeTaskWorktrees.ts, occurrences.ts, resetTask.ts, and their tests) reaches the folder through this function, never through a hardcoded path string, so changing the returned basename here is the only production edit this task needs. The retired \"staging\" return line is commented out, not deleted, per repo convention. The new test in stagingWorktree.test.ts asserts on the basename of the function's return value, not on a hardcoded path segment, so it does not itself become a place that pins the old name.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/shared/stagingWorktree.ts",
+      "scripts/tackle-tasks/shared/stagingWorktree.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "New test in scripts/tackle-tasks/shared/stagingWorktree.test.ts, e.g. test_stagingWorktreePath_usesAwaitingTestingAsTheFolderName: call stagingWorktreePath(repo) using the existing makeTempRepoWithTestScript(\"main\") fixture as repo, take basename() of the returned path, and assert it equals the exact string \"awaitingTesting\". The existing test test_ensureStagingWorktree_addsALinkedWorktreeOnTheSourceBranch already asserts existsSync(path) and git(path, \"branch\", \"--show-current\") without hardcoding the folder name, so it needs no edit and must still pass unmodified.",
+    "difficulty": 2,
+    "blockedBy": [
+      {
+        "taskNumber": 231,
+        "reason": "chain order: [folder 1] comes before [folder 2]"
+      }
+    ]
   }
 ]
