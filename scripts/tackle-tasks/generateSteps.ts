@@ -418,7 +418,7 @@ function getScriptFromPreviousConfig(configPath: string): Record<string, string>
   return scriptByStepKey;
 }
 
-// diagram-steps.json wins over the diagram label on disagreement, the same way it wins for the script path.  Every old entry gets a value here (true or false), so the box loop can tell "no old entry" from "old entry, off".
+// Every old entry gets true or false, so the box loop can tell "no old entry" from "not flagged".
 function getTakesSourceLockFromPreviousConfig(configPath: string): Record<string, boolean> {
   if (!existsSync(configPath)) {
     return {};
