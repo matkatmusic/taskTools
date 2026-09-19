@@ -74,12 +74,12 @@ test("test_generateSteps_leavesAnExistingScriptAlone", () => {
     assert.equal(readFileSync(join(stepsRoot, "one/A.ts"), "utf8"), "// mine\n");
 });
 
-// The orphan guard replaces the old silent-drop behavior: a box a diagram no longer names throws.
-test("test_generateSteps_throwsWhenADroppedBoxesStubIsStillOnDisk", () => {
-    const { diagramFolder, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> GONE\n" });
-    writeFileSync(join(diagramFolder, "one.mmd"), "flowchart TD\n    A --> B\n");
-    assert.throws(run, /one\/GONE\.ts is named by no diagram/);
-});
+// RETIRED (task 220): asserted assertNoOrphanBoxScripts's throw; that check is retired.
+// test("test_generateSteps_throwsWhenADroppedBoxesStubIsStillOnDisk", () => {
+//     const { diagramFolder, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> GONE\n" });
+//     writeFileSync(join(diagramFolder, "one.mmd"), "flowchart TD\n    A --> B\n");
+//     assert.throws(run, /one\/GONE\.ts is named by no diagram/);
+// });
 
 test("test_generateSteps_writesTheConfigAsBoxAndScriptPairs", () => {
     const { readConfig } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
@@ -125,12 +125,12 @@ test("test_generateSteps_keepsAHandWrittenMutatingFlag", () => {
     assert.equal(run()["one.mmd"]![1]!.mutating, true);
 });
 
-// The orphan guard replaces the old silent-drop behavior: a renamed box's stale stub throws.
-test("test_generateSteps_throwsWhenARenamedBoxesOldStubIsStillOnDisk", () => {
-    const { diagramFolder, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
-    writeFileSync(join(diagramFolder, "one.mmd"), "flowchart TD\n    A --> C\n");
-    assert.throws(run, /one\/B\.ts is named by no diagram/);
-});
+// RETIRED (task 220): asserted assertNoOrphanBoxScripts's throw; that check is retired.
+// test("test_generateSteps_throwsWhenARenamedBoxesOldStubIsStillOnDisk", () => {
+//     const { diagramFolder, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
+//     writeFileSync(join(diagramFolder, "one.mmd"), "flowchart TD\n    A --> C\n");
+//     assert.throws(run, /one\/B\.ts is named by no diagram/);
+// });
 
 test("test_generateSteps_writesAStubThatReadsItsInputArgument", () => {
     const { stepsRoot } = generateFrom({ "one.mmd": "flowchart TD\n    NEW_BOX --> B\n" });
@@ -201,18 +201,20 @@ test("test_generateSteps_sharesOneScriptForABoxTwoDiagramsBothDraw", () => {
     assert.equal(oneEntry.template, twoEntry.template);
 });
 
-test("test_generateSteps_throwsOnAnOrphanBoxScript", () => {
-    const { stepsRoot, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
-    writeFileSync(join(stepsRoot, "one/GHOST.ts"), "// stray\n");
-    assert.throws(() => run(), (error: Error) => error.message.includes("GHOST.ts") && error.message.includes("is named by no diagram"));
-});
+// RETIRED (task 220): asserted assertNoOrphanBoxScripts's throw; that check is retired.
+// test("test_generateSteps_throwsOnAnOrphanBoxScript", () => {
+//     const { stepsRoot, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
+//     writeFileSync(join(stepsRoot, "one/GHOST.ts"), "// stray\n");
+//     assert.throws(() => run(), (error: Error) => error.message.includes("GHOST.ts") && error.message.includes("is named by no diagram"));
+// });
 
-test("test_generateSteps_throwsOnAStubOutsideItsOwnerFolder", () => {
-    const { stepsRoot, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n", "two.mmd": "flowchart TD\n    C --> D\n" });
-    mkdirSync(join(stepsRoot, "two"), { recursive: true });
-    writeFileSync(join(stepsRoot, "two/A.ts"), "// moved by hand\n");
-    assert.throws(() => run(), (error: Error) => error.message.includes("two/A.ts belongs in one/"));
-});
+// RETIRED (task 220): asserted assertNoOrphanBoxScripts's throw; that check is retired.
+// test("test_generateSteps_throwsOnAStubOutsideItsOwnerFolder", () => {
+//     const { stepsRoot, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n", "two.mmd": "flowchart TD\n    C --> D\n" });
+//     mkdirSync(join(stepsRoot, "two"), { recursive: true });
+//     writeFileSync(join(stepsRoot, "two/A.ts"), "// moved by hand\n");
+//     assert.throws(() => run(), (error: Error) => error.message.includes("two/A.ts belongs in one/"));
+// });
 
 test("test_generateSteps_doesNotThrowWhenEveryExistingScriptMatchesABox", () => {
     const { run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
@@ -486,4 +488,47 @@ test("test_generateSteps_readsAFileLineAsARepoRootRelativeScript", () => {
     assert.equal(entry.template, "scripts/tackle-tasks/preambleStatusCheck/CREATE_WORKTREE.template.json");
     assert.equal(existsSync(join(stepsRoot, "one/A.ts")), false);
     assert.equal(existsSync(join(stepsRoot, "one/A.template.json")), false);
+});
+
+test("test_generateSteps_writesACamelCaseFileLineForANewBlock", () => {
+    const { config, run, diagramFolder } = generateFrom({
+        "one.mmd": "flowchart TD\n    B_NEW_BLOCK --> B_SECOND\n    B_NEW_BLOCK[\"NEW_BLOCK\"]\n    B_SECOND[\"SECOND\"]\n",
+    });
+    const entry = config["one.mmd"]!.find(candidate => candidate.box === "B_NEW_BLOCK")!;
+    assert.ok(entry.script.endsWith("one/newBlock.ts"));
+    const diagram = readFileSync(join(diagramFolder, "one.mmd"), "utf8");
+    assert.ok(diagram.includes(`B_NEW_BLOCK["NEW_BLOCK<br/>file:${entry.script}"]`));
+
+    const secondConfig = run();
+    assert.deepEqual(secondConfig, config);
+    assert.equal(readFileSync(join(diagramFolder, "one.mmd"), "utf8"), diagram);
+});
+
+test("test_generateSteps_writesAStubThatThrowsNotImplemented", () => {
+    const { stepsRoot } = generateFrom({
+        "one.mmd": "flowchart TD\n    B_NEW_BLOCK --> B_SECOND\n    B_NEW_BLOCK[\"NEW_BLOCK\"]\n    B_SECOND[\"SECOND\"]\n",
+    });
+    assert.throws(
+        () => execFileSync("node", ["--no-inspect", join(stepsRoot, "one/newBlock.ts")], { encoding: "utf8" }),
+        (error: any) => error.stderr.includes("block B_NEW_BLOCK in one.mmd is not implemented"),
+    );
+});
+
+test("test_generateSteps_leavesAQChoiceNodeWithNoFileLineUnmodified", () => {
+    const { diagramFolder, stepsRoot } = generateFrom({
+        "one.mmd": "flowchart TD\n    Q_DECISION --> Q_CHOICE_DECISION_Y\n    Q_CHOICE_DECISION_Y --> B_YES\n    Q_DECISION[\"DECISION\"]\n    Q_CHOICE_DECISION_Y[\"YES\"]\n    B_YES[\"YES_BLOCK\"]\n",
+    });
+    const diagram = readFileSync(join(diagramFolder, "one.mmd"), "utf8");
+    assert.match(diagram, /Q_CHOICE_DECISION_Y\["YES"\]/);
+    assert.equal(existsSync(join(stepsRoot, "one/Q_CHOICE_DECISION_Y.ts")), false);
+    assert.equal(existsSync(join(stepsRoot, "one/qChoiceDecisionY.ts")), false);
+});
+
+test("test_generateSteps_throwsWhenAnEntrysScriptFileIsMissing", () => {
+    assert.throws(
+        () => generateFrom({
+            "one.mmd": "flowchart TD\n    A --> B\n    A[\"A<br/>file:scripts/tackle-tasks/mermaid5MissingScriptFixture/NOPE.ts\"]\n",
+        }),
+        /does not exist on disk/,
+    );
 });

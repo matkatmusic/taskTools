@@ -177,6 +177,41 @@ function getBlockFileTargets(diagram: string): Record<string, string> {
   return targets;
 }
 
+// "B_LOCK_SOURCE_REPO" -> "lockSourceRepo": strips the B_/Q_ prefix, camelCases the rest.
+function getBlockNameAsCamelCase(box: string): string {
+  const withoutPrefix = box.replace(/^(B_|Q_)/, "");
+  const words = withoutPrefix.split("_");
+  let camelCased = "";
+  for (const [index, word] of words.entries()) {
+    const lowerWord = word.toLowerCase();
+    const isFirstWord = index === 0;
+    if (isFirstWord) {
+      camelCased += lowerWord;
+      continue;
+    }
+    camelCased += lowerWord.charAt(0).toUpperCase() + lowerWord.slice(1);
+  }
+  return camelCased;
+}
+
+// Inserts "<br/>file:<path>" before the closing quote of a box's own label line.
+function writeFileLineIntoDiagram(diagramFolder: string, diagramFile: string, box: string, filePath: string): void {
+  const diagramPath = join(diagramFolder, diagramFile);
+  const diagram = readFileSync(diagramPath, "utf8");
+  const updatedLines: string[] = [];
+  for (const line of diagram.split("\n")) {
+    const statement = line.split("%%")[0]!.trim();
+    const labelBox = statement.split(/[[({]/)[0]!.trim();
+    const isBoxLabelLine = labelBox === box;
+    if (!isBoxLabelLine) {
+      updatedLines.push(line);
+      continue;
+    }
+    updatedLines.push(line.replace(/"(\]|\}|\))\s*$/, `<br/>file:${filePath}"$1`));
+  }
+  writeFileSync(diagramPath, updatedLines.join("\n"));
+}
+
 function buildStubScript(box: string, diagramFile: string, producesPrompt: boolean): string {
   const resultLine = producesPrompt
     ? `return { box: "${box}", scriptSignal: SCRIPT_SIGNAL.PROMPT, prompt: \`stub prompt from \${basename(fileURLToPath(import.meta.url))}\` };`
@@ -189,6 +224,22 @@ import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 
 export function main(input: string): Record<string, unknown> {
     ${resultLine}
+}
+
+// realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.
+if (realpathSync(process.argv[1]!) === realpathSync(fileURLToPath(import.meta.url)))
+    console.log(JSON.stringify(main(process.argv[2] ?? "")));
+`;
+}
+
+// A new block with no file: line gets this stub instead of buildStubScript.
+function buildNotImplementedStubScript(box: string, diagramFile: string): string {
+  return `// ${box}, from ${diagramFile}
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+export function main(_input: string): Record<string, unknown> {
+    throw new Error("block ${box} in ${diagramFile} is not implemented");
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.
@@ -377,43 +428,60 @@ function foldBlockSignpostsIntoNext(next: Record<string, string[]>, blockSignpos
   return folded;
 }
 
-// A stray stub script means a rename; one in the wrong folder means a move.
-function assertNoOrphanBoxScripts(stepsRoot: string, allBoxNames: Set<string>, getOwnerFolder: (box: string) => string): void {
-  if (!existsSync(stepsRoot)) {
+// RETIRED (task 220): breaks on a camelCase file name and a box keeping its prefix.
+// function assertNoOrphanBoxScripts(stepsRoot: string, allBoxNames: Set<string>, getOwnerFolder: (box: string) => string): void {
+//   if (!existsSync(stepsRoot)) {
+//     return;
+//   }
+//   const orphans: string[] = [];
+//   for (const ownerFolder of readdirSync(stepsRoot, { withFileTypes: true })) {
+//     if (!ownerFolder.isDirectory()) {
+//       continue;
+//     }
+//     if (ownerFolder.name === "shared") {
+//       continue;
+//     }
+//     for (const file of readdirSync(join(stepsRoot, ownerFolder.name))) {
+//       if (!file.endsWith(".ts")) {
+//         continue;
+//       }
+//       if (file.startsWith("_")) {
+//         continue;
+//       }
+//       if (file.endsWith(".test.ts")) {
+//         continue;
+//       }
+//       const box = basename(file, ".ts");
+//       if (!allBoxNames.has(box)) {
+//         orphans.push(`${join(ownerFolder.name, file)} is named by no diagram; git mv it to the new name or delete it`);
+//         continue;
+//       }
+//       if (getOwnerFolder(box) !== ownerFolder.name) {
+//         orphans.push(`${join(ownerFolder.name, file)} belongs in ${getOwnerFolder(box)}/; git mv it there`);
+//       }
+//     }
+//   }
+//   if (orphans.length === 0) {
+//     return;
+//   }
+//   throw new Error(orphans.join("\n"));
+// }
+
+// A diagram-steps.json entry naming a missing script means an unmet file: reference.
+function assertEveryEntryScriptExists(config: StepConfig): void {
+  const missing: string[] = [];
+  for (const [diagramFile, entries] of Object.entries(config)) {
+    for (const entry of entries) {
+      const scriptExists = existsSync(join(PROJECT_ROOT, entry.script));
+      if (!scriptExists) {
+        missing.push(`${entry.script} in ${diagramFile} does not exist on disk`);
+      }
+    }
+  }
+  if (missing.length === 0) {
     return;
   }
-  const orphans: string[] = [];
-  for (const ownerFolder of readdirSync(stepsRoot, { withFileTypes: true })) {
-    if (!ownerFolder.isDirectory()) {
-      continue;
-    }
-    if (ownerFolder.name === "shared") {
-      continue;
-    }
-    for (const file of readdirSync(join(stepsRoot, ownerFolder.name))) {
-      if (!file.endsWith(".ts")) {
-        continue;
-      }
-      if (file.startsWith("_")) {
-        continue;
-      }
-      if (file.endsWith(".test.ts")) {
-        continue;
-      }
-      const box = basename(file, ".ts");
-      if (!allBoxNames.has(box)) {
-        orphans.push(`${join(ownerFolder.name, file)} is named by no diagram; git mv it to the new name or delete it`);
-        continue;
-      }
-      if (getOwnerFolder(box) !== ownerFolder.name) {
-        orphans.push(`${join(ownerFolder.name, file)} belongs in ${getOwnerFolder(box)}/; git mv it there`);
-      }
-    }
-  }
-  if (orphans.length === 0) {
-    return;
-  }
-  throw new Error(orphans.join("\n"));
+  throw new Error(missing.join("\n"));
 }
 
 // A synthetic box (outside the real 19) is owned by whichever diagram names it first.
@@ -431,14 +499,16 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
   const mutatingByStepKey = getMutatingFromPreviousConfig(configPath);
   const parsedDiagrams = parseDiagrams(diagramFolder);
 
-  const allBoxNames = new Set<string>();
-  for (const data of parsedDiagrams.values()) {
-    for (const box of data.boxes) {
-      allBoxNames.add(box);
-    }
-  }
+  // RETIRED (task 220): only assertNoOrphanBoxScripts read allBoxNames.
+  // const allBoxNames = new Set<string>();
+  // for (const data of parsedDiagrams.values()) {
+  //   for (const box of data.boxes) {
+  //     allBoxNames.add(box);
+  //   }
+  // }
   const getOwnerFolder = (box: string): string => BLOCK_OWNER_FOLDER[box] ?? getDefaultOwnerFolder(box, parsedDiagrams);
-  assertNoOrphanBoxScripts(stepsRoot, allBoxNames, getOwnerFolder);
+  // RETIRED (task 220): replaced by assertEveryEntryScriptExists, called after the box loop.
+  // assertNoOrphanBoxScripts(stepsRoot, allBoxNames, getOwnerFolder);
 
   const newTemplatePaths = new Set<string>();
   const config: StepConfig = {};
@@ -476,19 +546,36 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
         scriptPath = join(PROJECT_ROOT, fileTarget);
         templatePath = join(PROJECT_ROOT, fileTarget.replace(/\.ts$/, ".template.json"));
       }
+      const isNewBlockNode = box.startsWith("B_") || box.startsWith("Q_");
+      if (!hasFileTarget) {
+        if (isNewBlockNode) {
+          const camelCaseName = getBlockNameAsCamelCase(box);
+          scriptPath = join(stepsDirectory, `${camelCaseName}.ts`);
+          templatePath = join(stepsDirectory, `${camelCaseName}.template.json`);
+          writeFileLineIntoDiagram(diagramFolder, diagramFile, box, relative(PROJECT_ROOT, scriptPath));
+        }
+      }
       // An existing file is the author's, so only a missing one gets written.
       if (!existsSync(scriptPath)) {
-        if (!allowStubs) {
-          throw new Error(`${scriptPath} is missing; a custom diagram folder must author its own block scripts`);
+        if (!hasFileTarget) {
+          if (!allowStubs) {
+            throw new Error(`${scriptPath} is missing; a custom diagram folder must author its own block scripts`);
+          }
+          if (isNewBlockNode) {
+            writeFileSync(scriptPath, buildNotImplementedStubScript(box, diagramFile));
+          } else {
+            writeFileSync(scriptPath, buildStubScript(box, diagramFile, producesPrompt));
+          }
         }
-        writeFileSync(scriptPath, buildStubScript(box, diagramFile, producesPrompt));
       }
       if (!existsSync(templatePath)) {
-        if (!allowStubs) {
-          throw new Error(`${templatePath} is missing; a custom diagram folder must author its own block templates`);
+        if (!hasFileTarget) {
+          if (!allowStubs) {
+            throw new Error(`${templatePath} is missing; a custom diagram folder must author its own block templates`);
+          }
+          writeFileSync(templatePath, buildStubTemplate(box, producesPrompt));
+          newTemplatePaths.add(relative(PROJECT_ROOT, templatePath));
         }
-        writeFileSync(templatePath, buildStubTemplate(box, producesPrompt));
-        newTemplatePaths.add(relative(PROJECT_ROOT, templatePath));
       }
       const mutating = mutatingByStepKey[`${diagramFile}::${box}`];
       const nextBlockOverride = diagramFolder === DEFAULT_DIAGRAM_FOLDER ? NEXT_BLOCK_OVERRIDES[`${diagramFile}::${box}`] : undefined;
@@ -508,6 +595,7 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
     }
     config[diagramFile] = entries;
   }
+  assertEveryEntryScriptExists(config);
   seedInputTemplatesFromPredecessors(config, newTemplatePaths);
   writeFileSync(configPath, `${JSON.stringify(config, null, 4)}\n`);
   return config;
