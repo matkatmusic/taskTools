@@ -73,9 +73,12 @@ const BLOCKS_BY_OWNER_FOLDER: Record<string, string[]> = {
     "RELEASE_WORKTREE_LEASE", "DOES_RUN_HOLD_SOURCE_LOCK_Q", "RELEASE_SOURCE_LOCK", "REPORT_EXIT_TYPE_AND_NOTE",
   ],
 };
-const BLOCK_OWNER_FOLDER: Record<string, string> = Object.fromEntries(
-  Object.entries(BLOCKS_BY_OWNER_FOLDER).flatMap(([folder, blocks]) => blocks.map(block => [block, folder])),
-);
+const BLOCK_OWNER_FOLDER: Record<string, string> = {};
+for (const [folder, blocks] of Object.entries(BLOCKS_BY_OWNER_FOLDER)) {
+  for (const block of blocks) {
+    BLOCK_OWNER_FOLDER[block] = folder;
+  }
+}
 
 // next holds bare box ids for same-diagram arrows and "other.mmd::BOX" when the arrow crosses into another diagram.
 export type AgentOptions = { model: string; effort: string; agentType?: string };
