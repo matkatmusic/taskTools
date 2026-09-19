@@ -1098,5 +1098,44 @@
         "reason": "chain order: [folder 1] comes before [folder 2]"
       }
     ]
+  },
+  {
+    "taskNumber": 233,
+    "version": "c0a05a99788e4766087ae92f0df51bc7f82c2663",
+    "title": "[folder 3] Rebuild the awaitingTesting folder when it is on the wrong branch and holds no work",
+    "userDescription": "3. `ensureStagingWorktree` rebuilds the shared `awaitingTesting` folder on the expected branch when the folder is on the wrong branch and holds no work.\n   WHY: after a user commit on the folder's branch, `git status --porcelain` is never empty again, so the check at `stagingWorktree.ts:32-35` throws on every run (task 29 in relationship-mermaid). No work is in the folder; git only reports a stale index.\n   HOW: in `addOrVerifyLinkedWorktree`, comment out the `status --porcelain` check and the `rmSync` at `stagingWorktree.ts:32-38`. Write the work rule inline. Holds work: throw with the folder path, the found branch, and `git status --porcelain`. Holds no work: `git worktree remove --force`, `git worktree prune`, `git worktree add --force`. Add two tests in `tests/stagingWorktreeStale.test.ts`. The first puts the folder on the user's branch, commits on that branch in the source checkout, and expects a rebuild on `staging`. The second adds an untracked file and expects the throw.",
+    "chainGoal": [
+      "When a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it. The chain is [folder 1] to [folder 9] from specs/awaiting-testing-folder.md."
+    ],
+    "goal": [
+      "- `node --test tests/stagingWorktreeStale.test.ts` passes, including the two new tests described in this task's `tests` field.",
+      "- `rg -n 'ls-files.*--others.*--exclude-standard' scripts/tackle-tasks/shared/stagingWorktree.ts` matches the new work-rule check inside `addOrVerifyLinkedWorktree`.",
+      "- `node --test scripts/tackle-tasks/shared/stagingWorktree.test.ts` still passes, confirming the case where the folder really does hold work is unchanged.",
+      "- `node --test scripts/tackle-tasks/shared/occurrences.test.ts` still passes, confirming a caller that reaches `ensureStagingWorktree` indirectly through `loadSourceManifest` is unaffected."
+    ],
+    "notInScope": [
+      "- renaming the shared folder itself: done by [folder 2]",
+      "- removing the pre-existing `staging`-named folder from disk: owned by [folder 4]",
+      "- pointing the merge tool's `--merge` CLI at the `staging` branch: owned by [folder 5]"
+    ],
+    "problemSolvedByTask": "After a user commit on the shared folder's branch, `git status --porcelain` reports a stale index every time even though no real work sits in the folder, so the wrong-branch guard throws on every pipeline run instead of only when work would actually be lost.",
+    "description": "addOrVerifyLinkedWorktree in scripts/tackle-tasks/shared/stagingWorktree.ts, when the folder's branch does not match the expected branch, currently throws whenever git status --porcelain is non-empty and otherwise deletes the folder with rmSync and re-adds it with git worktree add --force. That porcelain check treats a stale index (left behind by a commit made elsewhere on the same branch) the same as real uncommitted work, so it throws even when nothing would be lost. The fix replaces that check with the spec's inline work rule: the folder holds work when git diff --quiet exits non-zero, or git ls-files --others --exclude-standard prints a line; nothing else counts. Holding work still throws, with the folder path, the found branch, and the full git status --porcelain output in the error message for diagnostics. Holding no work now rebuilds through git itself, git worktree remove --force then git worktree prune then git worktree add --force, instead of an fs-level rmSync, so no stale worktree administrative state survives the rebuild. Only the second branch of addOrVerifyLinkedWorktree changes; the first branch (folder missing or not a live worktree at all) is untouched.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/shared/stagingWorktree.ts",
+      "tests/stagingWorktreeStale.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "Two new tests in tests/stagingWorktreeStale.test.ts, built on the existing makeShapeFixture(\"one-submodule\", \"at-head\", 501) style fixture and the existing git() support helper. Test 1, test_ensureStagingWorktree_rebuildsOntoStagingWhenTheFolderIsOnTheUsersBranchWithOnlyAStaleCommit: after building the fixture and calling ensureStagingWorktree(fixture.rootPath, \"staging\") once, checkout a branch named \"feature-x\" inside the built awaitingTesting folder (git(worktreePath, \"checkout\", \"-B\", \"feature-x\")); then, in the fixture's own source checkout (not the folder), checkout \"feature-x\", write a file, commit it, and checkout back to the branch the source checkout started on. Call ensureStagingWorktree(fixture.rootPath, \"staging\") again and assert it does not throw and that git(worktreePath, \"branch\", \"--show-current\") equals the exact string \"staging\". Test 2, test_ensureStagingWorktree_throwsWhenTheFolderOnTheWrongBranchHoldsAnUntrackedFile: repeat the same setup (folder checked out onto \"feature-x\"), then write an untracked file named \"scratch.txt\" inside the folder with no git add. Call ensureStagingWorktree(fixture.rootPath, \"staging\") and assert it throws an Error whose message includes the folder path, includes the exact string \"feature-x\", and includes the exact string \"scratch.txt\".",
+    "difficulty": 5,
+    "blockedBy": [
+      {
+        "taskNumber": 232,
+        "reason": "chain order: [folder 2] comes before [folder 3]"
+      }
+    ]
   }
 ]
