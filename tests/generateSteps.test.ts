@@ -532,3 +532,31 @@ test("test_generateSteps_throwsWhenAnEntrysScriptFileIsMissing", () => {
         /does not exist on disk/,
     );
 });
+
+test("test_generateSteps_rewritesTheFileLineWhenDiagramStepsJsonScriptDiffers", () => {
+    const { config, configPath, diagramFolder, run, readConfig } = generateFrom({
+        "one.mmd": "flowchart TD\n    A --> B\n    A[\"A<br/>file:scripts/tackle-tasks/preambleStatusCheck/CREATE_WORKTREE.ts\"]\n",
+    });
+    const entry = config["one.mmd"]!.find(candidate => candidate.box === "A")!;
+    entry.script = "scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE.ts";
+    entry.template = "scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE.template.json";
+    writeFileSync(configPath, JSON.stringify(config, null, 4));
+
+    run();
+    const diagram = readFileSync(join(diagramFolder, "one.mmd"), "utf8");
+    assert.equal(
+        diagram,
+        "flowchart TD\n    A --> B\n    A[\"A<br/>file:scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE.ts\"]\n",
+    );
+    const syncedEntry = readConfig()["one.mmd"].find((candidate: { box: string }) => candidate.box === "A")!;
+    assert.equal(syncedEntry.script, "scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE.ts");
+});
+
+test("test_generateSteps_leavesTheDiagramByteIdenticalWhenScriptMatchesTheFileLine", () => {
+    const { diagramFolder, run } = generateFrom({
+        "one.mmd": "flowchart TD\n    A --> B\n    A[\"A<br/>file:scripts/tackle-tasks/preambleStatusCheck/CREATE_WORKTREE.ts\"]\n",
+    });
+    const diagram = readFileSync(join(diagramFolder, "one.mmd"), "utf8");
+    run();
+    assert.equal(readFileSync(join(diagramFolder, "one.mmd"), "utf8"), diagram);
+});

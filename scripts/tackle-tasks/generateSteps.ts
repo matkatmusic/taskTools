@@ -212,6 +212,24 @@ function writeFileLineIntoDiagram(diagramFolder: string, diagramFile: string, bo
   writeFileSync(diagramPath, updatedLines.join("\n"));
 }
 
+// Replaces an existing "file:<path>" value on a box's own label line, in place.
+function replaceFileLineInDiagram(diagramFolder: string, diagramFile: string, box: string, filePath: string): void {
+  const diagramPath = join(diagramFolder, diagramFile);
+  const diagram = readFileSync(diagramPath, "utf8");
+  const updatedLines: string[] = [];
+  for (const line of diagram.split("\n")) {
+    const statement = line.split("%%")[0]!.trim();
+    const labelBox = statement.split(/[[({]/)[0]!.trim();
+    const isBoxLabelLine = labelBox === box;
+    if (!isBoxLabelLine) {
+      updatedLines.push(line);
+      continue;
+    }
+    updatedLines.push(line.replace(/file:[^<"]+/, `file:${filePath}`));
+  }
+  writeFileSync(diagramPath, updatedLines.join("\n"));
+}
+
 function buildStubScript(box: string, diagramFile: string, producesPrompt: boolean): string {
   const resultLine = producesPrompt
     ? `return { box: "${box}", scriptSignal: SCRIPT_SIGNAL.PROMPT, prompt: \`stub prompt from \${basename(fileURLToPath(import.meta.url))}\` };`
@@ -312,6 +330,21 @@ function getMutatingFromPreviousConfig(configPath: string): Record<string, boole
     }
   }
   return mutatingByStepKey;
+}
+
+// diagram-steps.json is the source of truth for a block's script; a stale file: line must lose the comparison.
+function getScriptFromPreviousConfig(configPath: string): Record<string, string> {
+  if (!existsSync(configPath)) {
+    return {};
+  }
+  const previousConfig = JSON.parse(readFileSync(configPath, "utf8")) as StepConfig;
+  const scriptByStepKey: Record<string, string> = {};
+  for (const [diagramFile, entries] of Object.entries(previousConfig)) {
+    for (const entry of entries) {
+      scriptByStepKey[`${diagramFile}::${entry.box}`] = entry.script;
+    }
+  }
+  return scriptByStepKey;
 }
 
 // A leading underscore marks a spec diagram: it is drawn and served, but never generated from.
@@ -502,6 +535,7 @@ function getDefaultOwnerFolder(box: string, parsedDiagrams: Map<string, ParsedDi
 
 export function generateSteps(diagramFolder: string, stepsRoot: string, configPath: string, allowStubs: boolean = true): StepConfig {
   const mutatingByStepKey = getMutatingFromPreviousConfig(configPath);
+  const scriptByStepKey = getScriptFromPreviousConfig(configPath);
   const parsedDiagrams = parseDiagrams(diagramFolder);
 
   // RETIRED (task 220): only assertNoOrphanBoxScripts read allBoxNames.
@@ -550,6 +584,15 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
       if (hasFileTarget) {
         scriptPath = join(PROJECT_ROOT, fileTarget);
         templatePath = join(PROJECT_ROOT, fileTarget.replace(/\.ts$/, ".template.json"));
+        const previousScript = scriptByStepKey[`${diagramFile}::${box}`];
+        if (previousScript !== undefined) {
+          const scriptDiffersFromPreviousConfig = previousScript !== fileTarget;
+          if (scriptDiffersFromPreviousConfig) {
+            scriptPath = join(PROJECT_ROOT, previousScript);
+            templatePath = join(PROJECT_ROOT, previousScript.replace(/\.ts$/, ".template.json"));
+            replaceFileLineInDiagram(diagramFolder, diagramFile, box, previousScript);
+          }
+        }
       }
       const isNewBlockNode = box.startsWith("B_") || box.startsWith("Q_");
       if (!hasFileTarget) {
