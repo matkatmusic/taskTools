@@ -177,15 +177,16 @@ test("test_skillBody_reusesAnActiveTasksExistingPairInsteadOfRegeneratingIt", ()
     assert.equal(readFileSync(stepsPath, "utf8"), stepsBefore);
 });
 
-test("test_skillBody_preservesHandAuthoredMutatingFlagsOnATasksFirstGeneration", () => {
-    // Setup: a fresh target repository, task 9's first-ever launch.
-    const root = makeTargetRepository([9]);
-    skillBody("[9]", root);
-    // Verification: RECORD_MERGE_COMMIT_HASHES kept its hand-authored mutating flag on task 9's brand-new config.
-    const stepsConfig = JSON.parse(readFileSync(join(root, ".taskTools/workflows/9/steps.json"), "utf8"));
-    const entry = stepsConfig["pipeline-mergeSucceededExit.mmd"].find((e: { box: string }) => e.box === "RECORD_MERGE_COMMIT_HASHES");
-    assert.equal(entry.mutating, true);
-});
+// RETIRED (task 224): mutating flag is retired; shared/taskRunState.ts owns run-once now.
+// test("test_skillBody_preservesHandAuthoredMutatingFlagsOnATasksFirstGeneration", () => {
+//     // Setup: a fresh target repository, task 9's first-ever launch.
+//     const root = makeTargetRepository([9]);
+//     skillBody("[9]", root);
+//     // Verification: RECORD_MERGE_COMMIT_HASHES kept its hand-authored mutating flag on task 9's brand-new config.
+//     const stepsConfig = JSON.parse(readFileSync(join(root, ".taskTools/workflows/9/steps.json"), "utf8"));
+//     const entry = stepsConfig["pipeline-mergeSucceededExit.mmd"].find((e: { box: string }) => e.box === "RECORD_MERGE_COMMIT_HASHES");
+//     assert.equal(entry.mutating, true);
+// });
 
 test("test_ensureTaskWorkflowPair_writesResolvedAgentOptionsIntoTheTaskStepsJson", () => {
     // Setup: task 9 at difficulty 5, a band block.

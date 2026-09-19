@@ -74,7 +74,7 @@ const BLOCK_OWNER_FOLDER: Record<string, string> = Object.fromEntries(
 
 // next holds bare box ids for same-diagram arrows and "other.mmd::BOX" when the arrow crosses into another diagram.
 export type AgentOptions = { model: string; effort: string; agentType?: string };
-export type StepConfigEntry = { box: string; script: string; template: string; producesPrompt: boolean; mutating?: boolean; takesSourceLock?: boolean; nextBlock?: string; translator?: string; agent?: AgentOptions; next: string[] };
+export type StepConfigEntry = { box: string; script: string; template: string; producesPrompt: boolean; takesSourceLock?: boolean; nextBlock?: string; translator?: string; agent?: AgentOptions; next: string[] };
 // Keyed by diagram file name; two diagrams naming the same box share its script but keep separate entries.
 export type StepConfig = Record<string, StepConfigEntry[] | string>;
 export type DiagramEdges = { boxes: string[]; next: Record<string, string[]> };
@@ -95,11 +95,17 @@ export function getEdgesInDiagram(diagram: string): DiagramEdges {
   const next: Record<string, string[]> = {};
   for (const line of diagram.split("\n")) {
     const statement = line.split("%%")[0]!.trim();
-    if (!statement || DIAGRAM_KEYWORDS.test(statement)) {
+    const isEmptyStatement = !statement;
+    if (isEmptyStatement) {
+      continue;
+    }
+    const isKeywordStatement = DIAGRAM_KEYWORDS.test(statement);
+    if (isKeywordStatement) {
       continue;
     }
     // An invisible link only places boxes on the page; it is not an edge.
-    if (statement.includes("~~~")) {
+    const isInvisibleLinkStatement = statement.includes("~~~");
+    if (isInvisibleLinkStatement) {
       continue;
     }
     // A dotted arrow is a side note, not an edge; each side parses alone.
@@ -114,7 +120,8 @@ export function getEdgesInDiagram(diagram: string): DiagramEdges {
         boxChain.push(box);
       }
       for (const [position, box] of boxChain.entries()) {
-        if (!boxes.includes(box)) {
+        const isNewBox = !boxes.includes(box);
+        if (isNewBox) {
           boxes.push(box);
         }
         next[box] ??= [];
@@ -382,26 +389,27 @@ function getTemplatePathForStepKey(config: StepConfig, stepKey: string): string 
   return undefined;
 }
 
-// The mutating flag is hand-written, so regenerating from the arrows must not drop it.
-function getMutatingFromPreviousConfig(configPath: string): Record<string, boolean> {
-  if (!existsSync(configPath)) {
-    return {};
-  }
-  const previousConfig = JSON.parse(readFileSync(configPath, "utf8")) as StepConfig;
-  const mutatingByStepKey: Record<string, boolean> = {};
-  for (const [diagramFile, entries] of Object.entries(previousConfig)) {
-    const isStartValue = typeof entries === "string";
-    if (isStartValue) {
-      continue;
-    }
-    for (const entry of entries) {
-      if (entry.mutating) {
-        mutatingByStepKey[`${diagramFile}::${entry.box}`] = true;
-      }
-    }
-  }
-  return mutatingByStepKey;
-}
+// RETIRED (task 224): mutating is no longer carried forward; shared/taskRunState.ts owns run-once now.
+// // The mutating flag is hand-written, so regenerating from the arrows must not drop it.
+// function getMutatingFromPreviousConfig(configPath: string): Record<string, boolean> {
+//   if (!existsSync(configPath)) {
+//     return {};
+//   }
+//   const previousConfig = JSON.parse(readFileSync(configPath, "utf8")) as StepConfig;
+//   const mutatingByStepKey: Record<string, boolean> = {};
+//   for (const [diagramFile, entries] of Object.entries(previousConfig)) {
+//     const isStartValue = typeof entries === "string";
+//     if (isStartValue) {
+//       continue;
+//     }
+//     for (const entry of entries) {
+//       if (entry.mutating) {
+//         mutatingByStepKey[`${diagramFile}::${entry.box}`] = true;
+//       }
+//     }
+//   }
+//   return mutatingByStepKey;
+// }
 
 // diagram-steps.json is the source of truth for a block's script; a stale file: line must lose the comparison.
 function getScriptFromPreviousConfig(configPath: string): Record<string, string> {
@@ -624,7 +632,8 @@ function assertEveryEntryScriptExists(config: StepConfig): void {
 // A synthetic box (outside the real 19) is owned by whichever diagram names it first.
 function getDefaultOwnerFolder(box: string, parsedDiagrams: Map<string, ParsedDiagram>): string {
   for (const [diagramFile, data] of parsedDiagrams) {
-    if (data.boxes.includes(box)) {
+    const diagramDrawsThisBox = data.boxes.includes(box);
+    if (diagramDrawsThisBox) {
       return basename(diagramFile, ".mmd");
     }
   }
@@ -654,7 +663,8 @@ function getStartBlock(config: StepConfig): string {
     }
     for (const entry of entries) {
       const stepKey = `${diagramFile}::${entry.box}`;
-      if (!targetedKeys.has(stepKey)) {
+      const hasNoArrowIntoIt = !targetedKeys.has(stepKey);
+      if (hasNoArrowIntoIt) {
         candidates.push(stepKey);
       }
     }
@@ -665,8 +675,9 @@ function getStartBlock(config: StepConfig): string {
   return candidates[0]!;
 }
 
-export function generateSteps(diagramFolder: string, stepsRoot: string, configPath: string, allowStubs: boolean = true): StepConfig {
-  const mutatingByStepKey = getMutatingFromPreviousConfig(configPath);
+export function generateSteps(diagramFolder: string, stepsRoot: string, configPath: string, allowStubs: boolean = true, syncDiagramFiles: boolean = false): StepConfig {
+  // RETIRED (task 224): mutating is no longer carried forward.
+  // const mutatingByStepKey = getMutatingFromPreviousConfig(configPath);
   const scriptByStepKey = getScriptFromPreviousConfig(configPath);
   const takesSourceLockByStepKey = getTakesSourceLockFromPreviousConfig(configPath);
   const parsedDiagrams = parseDiagrams(diagramFolder);
@@ -692,7 +703,8 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
     const entries: StepConfigEntry[] = [];
     for (const box of data.boxes) {
       // A Q_CHOICE_ node is not a block; its target already landed in its parent decision's next list.
-      if (box.startsWith("Q_CHOICE_")) {
+      const isQChoiceNode = box.startsWith("Q_CHOICE_");
+      if (isQChoiceNode) {
         continue;
       }
       // A block: label makes this box a signpost to another diagram; it is not a step of its own.
@@ -727,7 +739,9 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
           if (scriptDiffersFromPreviousConfig) {
             scriptPath = join(PROJECT_ROOT, previousScript);
             templatePath = join(PROJECT_ROOT, previousScript.replace(/\.ts$/, ".template.json"));
-            replaceFileLineInDiagram(diagramFolder, diagramFile, box, previousScript);
+            if (syncDiagramFiles) {
+              replaceFileLineInDiagram(diagramFolder, diagramFile, box, previousScript);
+            }
           }
         }
       }
@@ -737,7 +751,9 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
           const camelCaseName = getBlockNameAsCamelCase(box);
           scriptPath = join(stepsDirectory, `${camelCaseName}.ts`);
           templatePath = join(stepsDirectory, `${camelCaseName}.template.json`);
-          writeFileLineIntoDiagram(diagramFolder, diagramFile, box, relative(PROJECT_ROOT, scriptPath));
+          if (syncDiagramFiles) {
+            writeFileLineIntoDiagram(diagramFolder, diagramFile, box, relative(PROJECT_ROOT, scriptPath));
+          }
         }
       }
       // An existing file is the author's, so only a missing one gets written.
@@ -763,7 +779,8 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
           newTemplatePaths.add(relative(PROJECT_ROOT, templatePath));
         }
       }
-      const mutating = mutatingByStepKey[`${diagramFile}::${box}`];
+      // RETIRED (task 224): mutating is no longer read or written.
+      // const mutating = mutatingByStepKey[`${diagramFile}::${box}`];
       const takesSourceLockFromDiagram = data.blockTakesSourceLockTargets[box] === true;
       const previousTakesSourceLock = takesSourceLockByStepKey[`${diagramFile}::${box}`];
       const hasPreviousEntry = previousTakesSourceLock !== undefined;
@@ -772,12 +789,16 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
         takesSourceLock = previousTakesSourceLock;
         if (takesSourceLock) {
           if (!takesSourceLockFromDiagram) {
-            writeTakesSourceLockLineIntoDiagram(diagramFolder, diagramFile, box);
+            if (syncDiagramFiles) {
+              writeTakesSourceLockLineIntoDiagram(diagramFolder, diagramFile, box);
+            }
           }
         }
         else {
           if (takesSourceLockFromDiagram) {
-            removeTakesSourceLockLineFromDiagram(diagramFolder, diagramFile, box);
+            if (syncDiagramFiles) {
+              removeTakesSourceLockLineFromDiagram(diagramFolder, diagramFile, box);
+            }
           }
         }
       }
@@ -792,7 +813,8 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
         script: relative(PROJECT_ROOT, scriptPath),
         template: relative(PROJECT_ROOT, templatePath),
         producesPrompt,
-        ...(mutating ? { mutating } : {}),
+        // RETIRED (task 224): mutating is no longer written into generated entries.
+        // ...(mutating ? { mutating } : {}),
         ...(takesSourceLock ? { takesSourceLock } : {}),
         ...(nextBlockOverride ? { nextBlock: nextBlockOverride } : {}),
         ...(fastNextBlockOverride ? { nextBlock: fastNextBlockOverride } : {}),
@@ -834,7 +856,7 @@ function watchDiagramFolder(diagramFolder: string, stepsRoot: string, configPath
     // One save fires several events, so the last one wins after a short pause.
     clearTimeout(pendingRegenerate);
     pendingRegenerate = setTimeout(() => {
-      console.log(getConfigSummary(generateSteps(diagramFolder, stepsRoot, configPath, allowStubs)));
+      console.log(getConfigSummary(generateSteps(diagramFolder, stepsRoot, configPath, allowStubs, true)));
     }, REGENERATE_DELAY_MS);
   });
   console.log(`watching ${relative(PROJECT_ROOT, diagramFolder)}`);
@@ -844,7 +866,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const commandArguments = process.argv.slice(2);
   const { diagramFolder, stepsRoot, allowStubs } = resolveDiagramFolderSetting(PROJECT_ROOT);
   const configPath = join(PROJECT_ROOT, "scripts/tackle-tasks/diagram-steps.json");
-  console.log(getConfigSummary(generateSteps(diagramFolder, stepsRoot, configPath, allowStubs)));
+  console.log(getConfigSummary(generateSteps(diagramFolder, stepsRoot, configPath, allowStubs, true)));
 
   if (commandArguments.includes("--watch")) {
     watchDiagramFolder(diagramFolder, stepsRoot, configPath, allowStubs);

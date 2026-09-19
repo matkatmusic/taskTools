@@ -1,5 +1,41 @@
 [
   {
+    "file": "scripts/tackle-tasks/resetTask.test.ts",
+    "name": "test_resetTask_atBlock_regeneratesStepsJsonFromCurrentDiagrams"
+  },
+  {
+    "file": "scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts",
+    "name": "test_skillBody_twoProjectsWithDifferentDiagramsNeverShareAStepsJson"
+  },
+  {
+    "file": "scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts",
+    "name": "test_skillBody_fastBeatsAProjectsCustomDiagramFolder"
+  },
+  {
+    "file": "scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts",
+    "name": "test_skillBody_omitsStartingBlockWhenOnlyFastFollowsTheTaskList"
+  },
+  {
+    "file": "tests/generateSteps.test.ts",
+    "name": "test_generateSteps_writesACamelCaseFileLineForANewBlock"
+  },
+  {
+    "file": "tests/generateSteps.test.ts",
+    "name": "test_generateSteps_rewritesTheFileLineWhenDiagramStepsJsonScriptDiffers"
+  },
+  {
+    "file": "tests/generateSteps.test.ts",
+    "name": "test_generateSteps_syncsTakesSourceLockBackIntoTheDiagramWhenConfigDiffers"
+  },
+  {
+    "file": "tests/generateSteps.test.ts",
+    "name": "test_generateSteps_movesTheTakesSourceLockLabelWhenTheStepListMovesTheFlag"
+  },
+  {
+    "file": "tests/generateSteps.test.ts",
+    "name": "test_generateSteps_aDiagramOnlyEditToTakesSourceLockLosesToTheStepList"
+  },
+  {
     "file": "tests/relatedTests.test.ts",
     "name": "test_main_readsTheTurnFlagOnStopAndReportsTypeErrors"
   },
@@ -10,5 +46,85 @@
   {
     "file": "tests/runStepHook.test.ts",
     "name": "test_runStepHook_reportsAHeldLockInsteadOfHangingOnPostToolUseSkill"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-commitMergeConflictFixIfNeeded_COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-commitMergeConflictFixIfNeeded_CONTINUE_REBASE_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-mergeSucceededExit_RECORD_MERGE_COMMIT_HASHES_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-mergeSucceededExit_WRITE_EXIT_TYPE_COMPLETED_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-mergeSucceededExit_RECORD_MODIFIED_FILES_SUCCESS_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-mergeSucceededExit_CLEAN_UP_WORKTREES_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-mergeSucceededExit_MARK_TASK_INACTIVE_SUCCESS_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-mergeSucceededExit_ARCHIVE_TASK_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_DOES_WORKTREE_EXIST_Q_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_CREATE_WORKTREE_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_TAKE_WORKTREE_LEASE_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_IS_WORKTREE_SAFE_TO_USE_Q_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_RESET_WORKTREE_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_REBASE_RESUMED_WORKTREE_ONTO_STAGING_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_DOES_FENCE_COVER_WORKTREE_Q_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_INIT_SUBMODULES_RECURSIVELY_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_DOCUMENT_GENERATION_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-rebase_REBASE_ONTO_TARGET_BRANCH_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-whatDidThePlannerReturn_WRITE_CLARIFY_REQUEST_producesItsOutputContract"
+  },
+  {
+    "file": "tests/workflowAgentOptions.test.ts",
+    "name": "test_workflow_aBareStartingBlockGetsThatBlocksAgentOptions"
   }
 ]

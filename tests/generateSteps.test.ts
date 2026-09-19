@@ -125,12 +125,13 @@ test("test_generateSteps_writesTheNextBoxFromTheArrows", () => {
     assert.deepEqual(config["one.mmd"]!.map(entry => entry.next), [["B"], []]);
 });
 
-test("test_generateSteps_keepsAHandWrittenMutatingFlag", () => {
-    const { config, configPath, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
-    config["one.mmd"]![1]!.mutating = true;
-    writeFileSync(configPath, JSON.stringify(config, null, 4));
-    assert.equal(run()["one.mmd"]![1]!.mutating, true);
-});
+// RETIRED (task 224): mutating flag is retired; shared/taskRunState.ts owns run-once now.
+// test("test_generateSteps_keepsAHandWrittenMutatingFlag", () => {
+//     const { config, configPath, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
+//     config["one.mmd"]![1]!.mutating = true;
+//     writeFileSync(configPath, JSON.stringify(config, null, 4));
+//     assert.equal(run()["one.mmd"]![1]!.mutating, true);
+// });
 
 // RETIRED (task 220): asserted assertNoOrphanBoxScripts's throw; that check is retired.
 // test("test_generateSteps_throwsWhenARenamedBoxesOldStubIsStillOnDisk", () => {
@@ -302,6 +303,24 @@ test("test_generateSteps_leavesTheFastNextBlockOverrideOffTheDefaultDiagramFolde
     const config = narrow(generateSteps(join(PROJECT_ROOT, "diagrams/tackle-tasks"), join(PROJECT_ROOT, "scripts/tackle-tasks"), tempConfigPath, false));
     const entry = config["pipeline-commitImplementationIfNeeded.mmd"]!.find(candidate => candidate.box === "ARE_TASK_TESTS_SKIPPED_Q")!;
     assert.equal(entry.nextBlock, undefined);
+});
+
+test("test_generateSteps_defaultDoesNotWriteToDiagramFolder", () => {
+    // Setup: a previous config that disagrees with the diagram, which already carries the takesSourceLock label.
+    const tempConfigPath = join(mkdtempSync(join(tmpdir(), "generate-steps-no-sync-")), "steps.json");
+    writeFileSync(tempConfigPath, JSON.stringify({
+        "pipeline-lockSourceRepo.mmd": [
+            { box: "LOCK_SOURCE_REPO", script: "scripts/tackle-tasks/lockSourceRepo/LOCK_SOURCE_REPO.ts", template: "scripts/tackle-tasks/lockSourceRepo/LOCK_SOURCE_REPO.template.json", producesPrompt: false, takesSourceLock: false, next: [] },
+        ],
+    }));
+    const realDiagramPath = join(PROJECT_ROOT, "diagrams/tackle-tasks/pipeline-lockSourceRepo.mmd");
+    const before = readFileSync(realDiagramPath, "utf8");
+
+    // Test action: regenerate against the real default diagram folder with the default syncDiagramFiles (false).
+    generateSteps(join(PROJECT_ROOT, "diagrams/tackle-tasks"), join(PROJECT_ROOT, "scripts/tackle-tasks"), tempConfigPath);
+
+    // Verification: the real diagram file on disk never changed, even though the config disagreed with it.
+    assert.equal(readFileSync(realDiagramPath, "utf8"), before);
 });
 
 test("test_resolveDiagramFolderSetting_readsACustomDiagramFolderFromSettings", () => {

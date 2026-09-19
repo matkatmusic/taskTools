@@ -73,10 +73,11 @@ const config = JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as StepConfig;
 for (const [diagramFile, entries] of Object.entries(config)) {
     if (typeof entries === "string") continue;
     for (const entry of entries) {
-        // Mutating blocks write real files; their own test under tests/steps/<diagram>/ covers the contract instead.
-        if (entry.mutating) {
-            continue;
-        }
+        // RETIRED (task 224): mutating flag is retired; every entry now runs the contract test.
+        // // Mutating blocks write real files; their own test under tests/steps/<diagram>/ covers the contract instead.
+        // if (entry.mutating) {
+        //     continue;
+        // }
         test(`test_stepTemplate_${diagramFile.replace(".mmd", "")}_${entry.box}_producesItsOutputContract`, () => {
             const template = readBlockTemplate(entry.template);
             const { commandOutput, result } = runBlockScript(join(PROJECT_ROOT, entry.script), template.input, PROJECT_ROOT);
@@ -151,7 +152,11 @@ for (const [diagramFile, entries] of Object.entries(config)) {
 for (const [diagramFile, entries] of Object.entries(config)) {
     if (typeof entries === "string") continue;
     for (const entry of entries) {
-        if (!entry.producesPrompt || entry.mutating) {
+        // RETIRED (task 224): mutating flag is retired; every entry now runs the contract test.
+        // if (!entry.producesPrompt || entry.mutating) {
+        //     continue;
+        // }
+        if (!entry.producesPrompt) {
             continue;
         }
         test(`test_stepTemplate_${diagramFile.replace(".mmd", "")}_${entry.box}_promptHasNoContinuationInstructions`, () => {
