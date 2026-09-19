@@ -1498,5 +1498,89 @@
         "reason": "chain order: [launch 3] comes before [launch 4]"
       }
     ]
+  },
+  {
+    "taskNumber": 244,
+    "version": "37d0564224fb38027e24a1af771844788246457c",
+    "title": "[launch 5] Every diagram byte-identical in tackle-tasks and tackle-tasks-fast lives once in diagrams/shared/",
+    "userDescription": "5. Every diagram that is byte-identical in `diagrams/tackle-tasks/` and `diagrams/tackle-tasks-fast/` lives one time in `diagrams/shared/`. The new preamble is one of them.\n   WHY: the user does not want two copies of one file.\n   HOW: `diff -rq diagrams/tackle-tasks diagrams/tackle-tasks-fast` finds the identical files. `git mv` each one to `diagrams/shared/`. `git rm` the fast copy. The fast folder's old preamble copy is removed, and its `diagrams.json` names the shared new preamble. Both `diagrams.json` files name the shared paths. The link list in `diagrams/tackle-tasks/index.html:39-66` points at the `../shared/` paths. The generator's dead-link guard lists each fast-folder node that still uses an old preamble block name. Rename each one. Run the generator for both folders.\n\nUser ruling (2026-09-18): shared-file diagrams.json entries read like `../shared/pipeline-preambleStatusCheck.mmd`; `join(diagramFolder, entry)` resolves that with no guard against `../`, and entries are keyed to the basename per [launch 4]. There is no dead-link guard in the generator today: `getDefaultOwnerFolder` and `remapNextAcrossDiagrams` in `generateSteps.ts` never check that a jump target exists. That guard is added by [mermaid 11]: it throws ONE error listing diagram, block, and missing target for every dead link. This item's \"rename each one\" step relies on that check to find every fast-folder node that still names an old preamble block.",
+    "chainGoal": [
+      "The [launch 1] to [launch 22] chain makes a tackle-tasks launch reach the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet, per specs/launch-reaches-planning-alone.md."
+    ],
+    "goal": [
+      "- `diff -rq diagrams/tackle-tasks diagrams/tackle-tasks-fast` no longer reports any of the 13 moved files as present and identical in both folders.",
+      "- `diagrams/tackle-tasks/diagrams.json` and `diagrams/tackle-tasks-fast/diagrams.json` both name every moved file at its `../shared/<name>.mmd` path.",
+      "- `diagrams/tackle-tasks/index.html`'s link list points every moved entry's href at its `../shared/` path instead of its old bare name.",
+      "- Running the generator for `diagrams/tackle-tasks` raises no dead-link error from the [mermaid 11] guard.",
+      "- Running the generator for `diagrams/tackle-tasks-fast` (via the [mermaid 10] `folder:` word) raises no dead-link error, once every fast-folder node that still names an old preamble block is renamed.",
+      "- `scripts/tackle-tasks/diagram-steps.json` is regenerated and holds no reference to a removed `diagrams/tackle-tasks/pipeline-*.mmd` path for any moved file."
+    ],
+    "notInScope": [
+      "- Building the [mermaid 11] dead-link guard is that item's own work; this item only relies on it once it exists.",
+      "- The diagrams.json basename-to-declared-path lookup inside `parseDiagrams`, and `getDiagramFileNames`'s bare-basename contract, belong to [launch 4].",
+      "- Renaming a fast-folder node for any reason other than an old preamble block name is out of scope."
+    ],
+    "problemSolvedByTask": "The user does not want two copies of one diagram file that can drift apart between the default and fast pipelines.",
+    "description": "diagrams/tackle-tasks and diagrams/tackle-tasks-fast currently hold 13 byte-identical .mmd files, confirmed with `diff -rq`: the commitImplementationIfNeeded, commitMergeConflictFixIfNeeded, failuresExit, fixConflicts, fixTheCodebaseForSuite, implementTask, lockSourceRepo, mergeSucceededExit, planTheTask, preambleStatusCheck, rebase, reportOnlyExit, and runFullSuite pipeline diagrams. Each one moves to a new diagrams/shared/ folder with `git mv`, and its old copy in the fast folder is removed with `git rm`. Both folders' diagrams.json files, added ahead of this task by the mermaid chain, are updated to name the moved files at their `../shared/` path, keyed to the bare basename. diagrams/tackle-tasks/index.html's hardcoded link-list array is updated so every moved entry's href points at its `../shared/` path instead of its old bare name. The dead-link guard the mermaid chain adds throws one error per diagram, listing every fast-folder node that still names an old preamble block name; each one is renamed before the generator runs clean. The generator then runs for both folders, and the default folder's regenerated diagram-steps.json is committed.",
+    "modifiableFiles": [
+      "diagrams/tackle-tasks/pipeline-commitImplementationIfNeeded.mmd",
+      "diagrams/tackle-tasks/pipeline-commitMergeConflictFixIfNeeded.mmd",
+      "diagrams/tackle-tasks/pipeline-failuresExit.mmd",
+      "diagrams/tackle-tasks/pipeline-fixConflicts.mmd",
+      "diagrams/tackle-tasks/pipeline-fixTheCodebaseForSuite.mmd",
+      "diagrams/tackle-tasks/pipeline-implementTask.mmd",
+      "diagrams/tackle-tasks/pipeline-lockSourceRepo.mmd",
+      "diagrams/tackle-tasks/pipeline-mergeSucceededExit.mmd",
+      "diagrams/tackle-tasks/pipeline-planTheTask.mmd",
+      "diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd",
+      "diagrams/tackle-tasks/pipeline-rebase.mmd",
+      "diagrams/tackle-tasks/pipeline-reportOnlyExit.mmd",
+      "diagrams/tackle-tasks/pipeline-runFullSuite.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-commitImplementationIfNeeded.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-commitMergeConflictFixIfNeeded.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-failuresExit.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-fixConflicts.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-fixTheCodebaseForSuite.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-implementTask.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-lockSourceRepo.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-mergeSucceededExit.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-planTheTask.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-preambleStatusCheck.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-rebase.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-reportOnlyExit.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-runFullSuite.mmd",
+      "diagrams/tackle-tasks/diagrams.json",
+      "diagrams/tackle-tasks-fast/diagrams.json",
+      "diagrams/tackle-tasks/index.html",
+      "scripts/tackle-tasks/diagram-steps.json"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "createsFiles": [
+      "diagrams/shared/pipeline-commitImplementationIfNeeded.mmd",
+      "diagrams/shared/pipeline-commitMergeConflictFixIfNeeded.mmd",
+      "diagrams/shared/pipeline-failuresExit.mmd",
+      "diagrams/shared/pipeline-fixConflicts.mmd",
+      "diagrams/shared/pipeline-fixTheCodebaseForSuite.mmd",
+      "diagrams/shared/pipeline-implementTask.mmd",
+      "diagrams/shared/pipeline-lockSourceRepo.mmd",
+      "diagrams/shared/pipeline-mergeSucceededExit.mmd",
+      "diagrams/shared/pipeline-planTheTask.mmd",
+      "diagrams/shared/pipeline-preambleStatusCheck.mmd",
+      "diagrams/shared/pipeline-rebase.mmd",
+      "diagrams/shared/pipeline-reportOnlyExit.mmd",
+      "diagrams/shared/pipeline-runFullSuite.mmd"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "No new automated test file; verification is by running the generator. Check 1, defaultFolderHasNoDeadLinkAfterTheSharedMove: run `npm run steps`; expect exit code 0 and a rewritten scripts/tackle-tasks/diagram-steps.json with no entry whose script or file path is a removed diagrams/tackle-tasks/pipeline-*.mmd path for any of the 13 moved files. Check 2, fastFolderHasNoDeadLinkAfterTheSharedMove: run the generator against diagrams/tackle-tasks-fast using the [mermaid 10] `folder:` word; expect exit code 0 and no dead-link error naming any fast-folder node. Check 3, sharedFilesExistOnlyUnderShared: `diff -rq diagrams/tackle-tasks diagrams/shared` and `diff -rq diagrams/tackle-tasks-fast diagrams/shared` must each report every one of the 13 moved files as `Only in diagrams/shared`, never as also present in diagrams/tackle-tasks or diagrams/tackle-tasks-fast.",
+    "difficulty": 5,
+    "blockedBy": [
+      {
+        "taskNumber": 243,
+        "reason": "chain order: [launch 4] comes before [launch 5]"
+      }
+    ]
   }
 ]
