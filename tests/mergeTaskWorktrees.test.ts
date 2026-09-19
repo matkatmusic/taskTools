@@ -8,6 +8,7 @@ import { basename, dirname, isAbsolute, join } from "node:path";
 import { createWorktreeForGroup, resolveRunArgumentsPath, resolveRunOutcomesPath, resolveStepOutputsPath } from "../scripts/shared/prepareTasks.ts";
 import type { PreparedGroup, WorkflowArguments } from "../scripts/shared/prepareTasks.ts";
 import { currentBranchName } from "../scripts/shared/repositoryBranches.ts";
+import { stagingWorktreePath } from "../scripts/tackle-tasks/shared/stagingWorktree.ts";
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest, type RepositoryOccurrence } from "../scripts/shared/repositoryManifest.ts";
 import { bootstrapRepositoryManifest } from "../scripts/shared/manifestBootstrap.ts";
 import type { ArchiveRequest } from "../scripts/shared/taskArchival.ts";
@@ -534,6 +535,24 @@ test("test_runFlagReadsPreparedArgumentsAndOutcomesFromDiskThenDeletesThem", () 
     assert.deepEqual(output.reviewHandoffs, ["reviewed by codex"]);
     assert.equal(existsSync(argumentsFile), false);
     assert.equal(existsSync(outcomesFile), false);
+});
+
+test("test_runMergeCli_checksOutTheSharedFolderOntoStagingNeverTheUsersBranch", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    git(repoRoot, "branch", "staging");
+    git(repoRoot, "checkout", "-b", "not-staging");
+    writeFileSync(join(repoRoot, "extra.txt"), "extra\n");
+    git(repoRoot, "add", "extra.txt");
+    git(repoRoot, "commit", "-q", "-m", "extra on not-staging");
+    const taskBranch = "task-branch";
+    git(repoRoot, "worktree", "add", "--quiet", "-b", taskBranch, join(repoRoot, "..", "task-worktree"));
+    const taskWorktreePath = join(repoRoot, "..", "task-worktree");
+
+    execFileSync("node", ["--no-inspect", SCRIPT, "--merge", taskWorktreePath], { encoding: "utf8", cwd: repoRoot });
+
+    const stagingRoot = stagingWorktreePath(repoRoot);
+    const branchInSharedFolder = git(stagingRoot, "branch", "--show-current").trim();
+    assert.equal(branchInSharedFolder, "staging");
 });
 
 test("test_runPipelineCliProducesNoApprovalStateWhenAGroupConflicts", () => {

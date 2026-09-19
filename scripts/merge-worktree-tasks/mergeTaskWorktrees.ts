@@ -885,14 +885,18 @@ function runMergeCli(worktreePath: string): void {
     const repositorySources = collectRepositorySources(repoRoot, "staging");
     const parentSource = repositorySources.find((source) => source.path === "");
     if (!parentSource) throw new Error(`no recorded source branch for repository path "${repoRoot}"`);
-    ensureStagingWorktree(repoRoot, parentSource.sourceBranch);
+    // RETIRED (task 235): the user's branch put the shared folder on develop.
+    // ensureStagingWorktree(repoRoot, parentSource.sourceBranch);
+    ensureStagingWorktree(repoRoot, "staging");
     const submodulePathsDeepestFirst = repositorySources
         .map((source) => source.path)
         .filter((path) => path !== "")
         .sort((a, b) => b.split("/").length - a.split("/").length);
     const branch = currentBranchName(worktreePath);
     const group: PreparedGroup = { groupId: 0, worktree: worktreePath, branch, scope: "unknown", tasks: [] };
-    const outcome = mergeGroupBranchIntoRepo(stagingWorktreePath(repoRoot), group, parentSource.sourceBranch, submodulePathsDeepestFirst);
+    // RETIRED (task 235): the user's branch put the shared folder on develop.
+    // const outcome = mergeGroupBranchIntoRepo(stagingWorktreePath(repoRoot), group, parentSource.sourceBranch, submodulePathsDeepestFirst);
+    const outcome = mergeGroupBranchIntoRepo(stagingWorktreePath(repoRoot), group, "staging", submodulePathsDeepestFirst);
     if (outcome.merged) removeWorktreeAndBranch(repoRoot, worktreePath, branch);
     process.stdout.write(JSON.stringify(outcome));
 }
