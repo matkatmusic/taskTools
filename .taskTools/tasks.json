@@ -1350,5 +1350,42 @@
         "reason": "chain order: [folder 8] comes before [folder 9]"
       }
     ]
+  },
+  {
+    "taskNumber": 240,
+    "version": "def4f037e5191d2f93f4ace15cee0eeb6069f443",
+    "title": "[launch 1] Start: five things stop a launch today",
+    "userDescription": "1. Start: five things stop a launch today. Catch-up conflict: `scripts/shared/prepareTasks.ts:271-274` throws. Resumed worktree, rebase conflict: `preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts:68-77` goes to `ARE_2_CONFLICT_FIXES_DONE_Q`, which goes to `FAILURES_EXIT` after 2 tries. Resumed worktree, no notes file: `IS_PREVIOUS_RUN_RESUMABLE_Q.ts:11-21` goes to `FAILURES_EXIT`. File outside the fence: `DOES_FENCE_COVER_WORKTREE_Q.ts:19-26` goes to `FAILURES_EXIT`. Listed file missing: `INIT_SUBMODULES_RECURSIVELY.ts:22-30` goes to `FAILURES_EXIT`. The two diagram folders each hold a copy of the preamble.",
+    "chainGoal": [
+      "A tackle-tasks launch reaches the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet. The chain is [launch 1] to [launch 22] from specs/launch-reaches-planning-alone.md."
+    ],
+    "goal": [
+      "- `sed -n '260,280p' scripts/shared/prepareTasks.ts` confirms `resolveOrCreateStagingTip`'s diverged-merge branch throws when a real conflict remains after the merge attempt, with the command run and its output pasted.",
+      "- `cat scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts` confirms a rebase conflict routes to `pipeline-commitMergeConflictFixIfNeeded.mmd::ARE_2_CONFLICT_FIXES_DONE_Q`, and that block's 2-try stop still goes to `FAILURES_EXIT`, with the command run and its output pasted.",
+      "- `cat scripts/tackle-tasks/preambleStatusCheck/IS_PREVIOUS_RUN_RESUMABLE_Q.ts` confirms a resumed worktree with no notes file routes to `pipeline-failuresExit.mmd::FAILURES_EXIT`, with the command run and its output pasted.",
+      "- `cat scripts/tackle-tasks/preambleStatusCheck/DOES_FENCE_COVER_WORKTREE_Q.ts` confirms a file outside the task's fence routes to `pipeline-failuresExit.mmd::FAILURES_EXIT`, with the command run and its output pasted.",
+      "- `cat scripts/tackle-tasks/preambleStatusCheck/INIT_SUBMODULES_RECURSIVELY.ts` confirms a `modifiableFiles` entry missing on disk routes to `pipeline-failuresExit.mmd::FAILURES_EXIT`, with the command run and its output pasted.",
+      "- `fd -a pipeline-preambleStatusCheck.mmd diagrams/` lists one copy in `diagrams/tackle-tasks/` and one in `diagrams/tackle-tasks-fast/`, with the command run and its output pasted."
+    ],
+    "notInScope": [
+      "- Changing any of the five stops' behavior: that is later [launch N] items in this chain.",
+      "- The 2-try stop at `ARE_2_CONFLICT_FIXES_DONE_Q` for the rebase that runs after implementation: explicitly excluded from this whole chain's goal, and untouched by every [launch] item."
+    ],
+    "problemSolvedByTask": "Confirms the current list of five launch-stopping behaviors is accurate in the mermaid worktree before any later [launch] item changes one of them, so later items are graded against real current behavior instead of stale spec text.",
+    "description": "This is a check-only task with no code change, following the shape of every 'Start:' item in this project's chains: it re-confirms, with a command and its pasted output, the five things that stop a tackle-tasks launch today. Re-checked in the mermaid worktree against the spec's citations: prepareTasks.ts's diverged-merge branch throws when a real (non-submodule) conflict remains unresolved after the merge attempt inside its throwaway worktree; REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts routes a rebase conflict to ARE_2_CONFLICT_FIXES_DONE_Q, whose 2-try stop still goes to FAILURES_EXIT and is unchanged by this chain; IS_PREVIOUS_RUN_RESUMABLE_Q.ts routes a resumed worktree with no notes file to FAILURES_EXIT; DOES_FENCE_COVER_WORKTREE_Q.ts routes a file outside the task's fence to FAILURES_EXIT; INIT_SUBMODULES_RECURSIVELY.ts routes a modifiableFiles entry that is missing on disk to FAILURES_EXIT; and both diagrams/tackle-tasks/ and diagrams/tackle-tasks-fast/ hold their own copy of pipeline-preambleStatusCheck.mmd.",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 1,
+    "blockedBy": [
+      {
+        "taskNumber": 239,
+        "reason": "chain order: [folder 9] comes before [launch 1]"
+      }
+    ]
   }
 ]
