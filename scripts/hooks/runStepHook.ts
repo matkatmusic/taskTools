@@ -313,8 +313,10 @@ function buildFailure(
   // The run log keeps the whole stack; the note keeps the thrown message line only, when there is one.
   const thrownMessageLine = errors.slice(1).join("\n").split("\n").find((line) => /^\w*Error: /.test(line));
   const exitNote = thrownMessageLine === undefined ? errors.join("\n") : `${errors[0]}\n${thrownMessageLine}`;
-  if (consumedAPrompt && existing === null)
+  const consumedAPromptWithNoCheckpoint = consumedAPrompt && existing === null;
+  if (consumedAPromptWithNoCheckpoint) {
     throw new Error(`${stepKey} answered a prompt but ${worktree} holds no checkpoint`);
+  }
   writeCheckpoint(worktree, {
     taskNumber: Number(context.packet.taskNumber),
     passId: existing?.passId ?? randomUUID(),
