@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { ensureStagingWorktree, stagingWorktreePath } from "./stagingWorktree.ts";
 import { loadRepositoryManifest } from "../../shared/prepareTasks.ts";
 
@@ -48,6 +48,14 @@ test("test_ensureStagingWorktree_addsALinkedWorktreeOnTheSourceBranch", () => {
     assert.equal(git(path, "branch", "--show-current"), "staging");
     assert.equal(git(repo, "branch", "--show-current"), "main");
     assert.equal(git(repo, "worktree", "list", "--porcelain").includes(realpathSync(path)), true);
+});
+
+test("test_stagingWorktreePath_usesAwaitingTestingAsTheFolderName", () => {
+    const repo = makeTempRepoWithTestScript("main");
+
+    const path = stagingWorktreePath(repo);
+
+    assert.equal(basename(path), "awaitingTesting");
 });
 
 // Retired: superseded by tests/stagingWorktreeStale.test.ts (submodule sits detached at the gitlink; clean wrong branch rebuilds).

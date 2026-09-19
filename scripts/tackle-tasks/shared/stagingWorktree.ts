@@ -9,7 +9,9 @@ function git(cwd: string, ...args: string[]): string {
 }
 
 export function stagingWorktreePath(projectRoot: string): string {
-    return join(resolveTaskWorktreeConventionDirectory(projectRoot), "staging");
+    // RETIRED (task 232): folder renamed, staging now names only the branch.
+    // return join(resolveTaskWorktreeConventionDirectory(projectRoot), "staging");
+    return join(resolveTaskWorktreeConventionDirectory(projectRoot), "awaitingTesting");
 }
 
 // Checks the worktree is live and still points at sourceCheckoutPath, not a stale unrelated repo with a valid gitdir.
