@@ -1280,5 +1280,38 @@
         "reason": "chain order: [folder 6] comes before [folder 7]"
       }
     ]
+  },
+  {
+    "taskNumber": 238,
+    "version": "6acb1ca6d9e2899f4428acfeff19e6681d41b284",
+    "title": "[folder 8] Real run in relationship-mermaid finishes clean",
+    "userDescription": "8. A real tackle-tasks run in `~/Programming/relationship-mermaid` finishes without the wrong-branch throw.\n   WHY: that repo holds the real broken folder from task 29, so it proves steps 3 and 4 on the case that failed.\n   HOW: run `git -C ~/Programming/relationship-mermaid worktree list`. It shows `.../awaitingTesting [staging]` and no `.../staging` line. Paste the command and its output.",
+    "chainGoal": [
+      "When a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it. The chain is [folder 1] to [folder 9] from specs/awaiting-testing-folder.md."
+    ],
+    "goal": [
+      "- Running a real tackle-tasks invocation in `~/Programming/relationship-mermaid` finishes with no wrong-branch throw, with the command and its full pasted output.",
+      "- `git -C ~/Programming/relationship-mermaid worktree list` afterward shows a line ending `.../awaitingTesting [staging]` and no line ending `.../staging`, with the command and its output pasted."
+    ],
+    "notInScope": [
+      "- Any code change: this is a check-only task proven against a real repo outside this one.",
+      "- Rebuilding the folder or fixing the merge tool: those changes are [folder 3] and [folder 5]."
+    ],
+    "problemSolvedByTask": "relationship-mermaid holds the real broken shared-folder case that first surfaced the wrong-branch throw. Running the pipeline there for real is the only proof that [folder 3] and [folder 4] actually fix that throw on the case that caused it, not just in a clean fixture.",
+    "description": "This is a check-only task with no code change. It runs a real tackle-tasks pipeline invocation in ~/Programming/relationship-mermaid, a separate repo outside this one, whose shared checkout folder is the actual broken case the earlier chain items target. Passing means the run completes with no wrong-branch throw, and git -C ~/Programming/relationship-mermaid worktree list shows the shared folder renamed to awaitingTesting and sitting on staging, with no remaining line for an old folder still named staging. As of this writing, that repo's worktree list still shows the old `.../staging` folder checked out on `develop`, the pre-fix broken state the spec describes; this task is only meaningful once [folder 2] through [folder 5] have landed and a fresh run has been made there.",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 1,
+    "blockedBy": [
+      {
+        "taskNumber": 237,
+        "reason": "chain order: [folder 7] comes before [folder 8]"
+      }
+    ]
   }
 ]
