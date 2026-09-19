@@ -27,7 +27,11 @@ test("brief reproduces the pre-refactor skill body byte-for-byte once its substi
       `- unmerged worktrees: ${unmergedWorktrees}`,
     )
     .replaceAll("${CLAUDE_PLUGIN_ROOT}/scripts/mergeTaskWorktrees.ts", mergeTaskWorktreesPath)
-    .replaceAll("${CLAUDE_PLUGIN_ROOT}", repoRoot);
+    .replaceAll("${CLAUDE_PLUGIN_ROOT}", repoRoot)
+    .replace(
+      "note that those tasks' work is now on\nthe branch you were on when you ran `--discover`.",
+      "note that those tasks' work is now on\nthe `staging` branch in the `awaitingTesting` folder.",
+    );
   assert.equal(brief, expected);
 });
 
@@ -37,4 +41,8 @@ test("brief leaves no unexpanded CLAUDE_PLUGIN_ROOT placeholder", () => {
 
 test("brief embeds the absolute mergeTaskWorktrees.ts path in the --merge instruction", () => {
   assert.ok(brief.includes(`\`node "${mergeTaskWorktreesPath}" --merge <worktree path>\``));
+});
+
+test("brief no longer promises work landed on the branch the user was on", () => {
+  assert.doesNotMatch(brief, /branch you were on/);
 });
