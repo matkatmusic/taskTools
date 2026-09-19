@@ -219,7 +219,15 @@ function getMutatingFromPreviousConfig(configPath: string): Record<string, boole
 
 // A leading underscore marks a spec diagram: it is drawn and served, but never generated from.
 function getDiagramFileNames(diagramFolder: string): string[] {
-  return readdirSync(diagramFolder).filter(name => name.endsWith(".mmd") && !name.startsWith("_")).sort();
+  const diagramFileNames: string[] = [];
+  for (const name of readdirSync(diagramFolder)) {
+    const isDiagramFile = name.endsWith(".mmd");
+    const isSpecDiagram = name.startsWith("_");
+    if (isDiagramFile && !isSpecDiagram) {
+      diagramFileNames.push(name);
+    }
+  }
+  return diagramFileNames.sort();
 }
 
 export type DiagramFolderSetting = { diagramFolder: string; stepsRoot: string; allowStubs: boolean };
