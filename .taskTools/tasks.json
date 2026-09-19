@@ -1210,5 +1210,43 @@
         "reason": "chain order: [folder 4] comes before [folder 5]"
       }
     ]
+  },
+  {
+    "taskNumber": 236,
+    "version": "cb1b0d59605c31f167c79187a5a3b3e59b18e1c8",
+    "title": "[folder 6] Fix the merge brief's wrong-branch sentence",
+    "userDescription": "6. The merge brief tells the user that merged work is on the `staging` branch in the `awaitingTesting` folder.\n   WHY: `mergeWorktreeTasksBrief.ts:45-46` promises the work lands on the branch the user was on, and step 5 makes that false.\n   HOW: `brief` is a template literal, so replace the sentence. Add one test in `tests/mergeWorktreeTasksBrief.test.ts` that checks the new sentence and that the old \"the branch you were on\" wording is gone. Add one `.replace()` in the byte-for-byte test so the pinned old wording maps onto the new one.\n\nUser ruling (2026-09-18): old sentence (byte-exact): \"note that those tasks' work is now on the branch you were on when you ran `--discover`.\" New sentence: \"note that those tasks' work is now on the `staging` branch in the `awaitingTesting` folder.\" In tests/mergeWorktreeTasksBrief.test.ts, add one `.replace()` to the existing chain that maps the old sentence to the new one. The old sentence holds an apostrophe (`tasks'`) and the rest of the chain uses single-quoted strings, so write this call with double-quoted arguments. Add an assertion that `brief` no longer matches `/branch you were on/`. No other file pins the old wording.",
+    "chainGoal": [
+      "When a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it. The chain is [folder 1] to [folder 9] from specs/awaiting-testing-folder.md."
+    ],
+    "goal": [
+      "- `rg \"branch you were on\" scripts/merge-worktree-tasks/mergeWorktreeTasksBrief.ts` finds no match.",
+      "- `node --test tests/mergeWorktreeTasksBrief.test.ts` passes, including a new test asserting `brief` does not match `/branch you were on/`.",
+      "- `node scripts/merge-worktree-tasks/mergeWorktreeTasksBrief.ts` prints a line reading: note that those tasks' work is now on the `staging` branch in the `awaitingTesting` folder."
+    ],
+    "notInScope": [
+      "- Making the merge tool actually check `staging` into the shared folder: that's [folder 5].",
+      "- Rebuilding the shared folder when it is on the wrong branch and holds no work: that's [folder 3].",
+      "- Running the full test-suite baseline: that's [folder 7]."
+    ],
+    "problemSolvedByTask": "mergeWorktreeTasksBrief.ts tells the agent to promise the user their merged work landed on the branch they were on when they ran --discover. Once [folder 5] makes the merge tool always check work into staging inside the shared awaitingTesting folder, that promise is false and sends the user to look for their work on the wrong branch.",
+    "description": "mergeWorktreeTasksBrief.ts exports brief, a template literal used both as the /merge-worktree-tasks prompt and as a byte-for-byte fixture in mergeWorktreeTasksBrief.test.ts, which rebuilds an expected string from a pinned pre-refactor commit's SKILL.md body through a chain of .replace()/.replaceAll() calls and asserts brief equals it exactly. The sentence that follows a successful --merge call is a plain string inside that template literal; the fix is a text substitution with no logic change. The existing .replace()/.replaceAll() chain needs one more .replace() call mapping the old sentence onto the new one, written with double-quoted arguments because the old sentence contains an apostrophe. A second, independent test assertion confirms the old wording is fully gone by checking that brief no longer matches a regex for it. No other file in the repo pins the old sentence.",
+    "modifiableFiles": [
+      "scripts/merge-worktree-tasks/mergeWorktreeTasksBrief.ts",
+      "tests/mergeWorktreeTasksBrief.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "In tests/mergeWorktreeTasksBrief.test.ts, add one .replace() call to the existing .replace()/.replaceAll() chain that builds `expected` in the byte-for-byte test. The call maps the exact old sentence \"note that those tasks' work is now on the branch you were on when you ran `--discover`.\" onto the exact new sentence \"note that those tasks' work is now on the `staging` branch in the `awaitingTesting` folder.\" Write this call with double-quoted string arguments, since the old sentence contains an apostrophe and the rest of the chain uses single-quoted strings. Add a new, separate test whose body is exactly: assert.doesNotMatch(brief, /branch you were on/); — this proves the old wording is gone from `brief` independent of the byte-for-byte comparison.",
+    "difficulty": 3,
+    "blockedBy": [
+      {
+        "taskNumber": 235,
+        "reason": "chain order: [folder 5] comes before [folder 6]"
+      }
+    ]
   }
 ]
