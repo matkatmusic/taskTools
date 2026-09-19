@@ -880,5 +880,44 @@
         "reason": "chain order: [mermaid 10] comes before [mermaid 11]"
       }
     ]
+  },
+  {
+    "taskNumber": 227,
+    "version": "06303466e380aa19187d4f76a7eabd75e26dd602",
+    "title": "[mermaid 12] Comment out the default-pipeline override tables",
+    "userDescription": "12. WHAT: Comment out the default-pipeline override tables.\n   WHY: the diagram must be the only source of the route.\n   HOW: `NEXT_BLOCK_OVERRIDES` and `TRANSLATOR_OVERRIDES` at `generateSteps.ts:16-22` are commented out. The route they carried (PREAMBLE_STATUS_CHECK to IS_TASK_BLOCKED_Q) is already drawn in the new preamble diagram. `FAST_NEXT_BLOCK_OVERRIDES` stays until fast mode migrates.",
+    "chainGoal": [
+      "The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone. The chain is [mermaid 1] to [mermaid 15] from specs/diagrams-in-mermaid-viewer-format.md."
+    ],
+    "goal": [
+      "- `rg 'NEXT_BLOCK_OVERRIDES|TRANSLATOR_OVERRIDES' scripts/tackle-tasks/generateSteps.ts` shows both table declarations and both read sites commented out, and shows `FAST_NEXT_BLOCK_OVERRIDES` still active and unchanged.",
+      "- After `npm run steps`, the `Q_PREAMBLE_STATUS_CHECK` entry for `pipeline-preambleStatusCheck.mmd` in `scripts/tackle-tasks/diagram-steps.json` has no `nextBlock` key and no `translator` key, and its `next` array still lists `Q_IS_TASK_BLOCKED_Q`.",
+      "- `node --test tests/generateSteps.test.ts` passes, with the four tests built around `NEXT_BLOCK_OVERRIDES`/`TRANSLATOR_OVERRIDES` commented out and the two tests built around `FAST_NEXT_BLOCK_OVERRIDES` still running and green."
+    ],
+    "notInScope": [
+      "- Migrating `FAST_NEXT_BLOCK_OVERRIDES` to the diagram: it stays until fast mode migrates, per this item's own HOW.",
+      "- Drawing the Q_PREAMBLE_STATUS_CHECK-to-Q_IS_TASK_BLOCKED_Q route in the diagram: already done by [mermaid 11]; this task only removes the now-redundant override tables.",
+      "- Any other lookup table or override mechanism in generateSteps.ts: out of scope."
+    ],
+    "problemSolvedByTask": "The diagram must be the only source of the route. Once [mermaid 11] draws Q_PREAMBLE_STATUS_CHECK to Q_IS_TASK_BLOCKED_Q directly in the preamble diagram, NEXT_BLOCK_OVERRIDES and TRANSLATOR_OVERRIDES are a second, stale source of truth for the same hop and must go.",
+    "description": "NEXT_BLOCK_OVERRIDES and TRANSLATOR_OVERRIDES are two lookup tables in generateSteps.ts, keyed by the literal string `${diagramFile}::${box}`; today that key is `\"pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK\"`, the diagram's old, unprefixed block name. By the time this task runs, [mermaid 11] has already renamed that block to `Q_PREAMBLE_STATUS_CHECK` in the diagram, so the generator's lookup key becomes `\"pipeline-preambleStatusCheck.mmd::Q_PREAMBLE_STATUS_CHECK\"`, which no longer matches either table's key. Both tables are therefore already dead by the time this task starts, silently returning undefined and contributing no `nextBlock` or `translator` to the generated `Q_PREAMBLE_STATUS_CHECK` entry; commenting them out only retires dead code, it does not change the already-observed shape of `scripts/tackle-tasks/diagram-steps.json`. `FAST_NEXT_BLOCK_OVERRIDES` is a separate table for the fast pipeline, keyed on a still-current box name, and is untouched. The two tables are read at exactly two sites in the per-box entry-building loop (the `nextBlockOverride` and `translatorOverride` lookups and the object-spreads that consume them); those sites are commented out along with the declarations, so no code references the now-commented consts. tests/generateSteps.test.ts has four tests written against the old, now-stale key: test_generateSteps_addsANextBlockOverrideOnThePreamblesFirstBlock and test_generateSteps_addsATranslatorOverrideOnThePreamblesFirstBlock assert the override is present, and test_generateSteps_leavesTheNextBlockOverrideOffOutsideTheDefaultDiagramFolder and test_generateSteps_leavesTheTranslatorOverrideOffOutsideTheDefaultDiagramFolder assert it is absent outside the default folder; all four are commented out, since the first two already assert a fact that is false and the other two exist only to contrast against them. Two sibling tests, test_generateSteps_addsTheFastNextBlockOverrideOnAreTaskTestsSkipped and test_generateSteps_leavesTheFastNextBlockOverrideOffTheDefaultDiagramFolder, exercise FAST_NEXT_BLOCK_OVERRIDES on a different, still-current box name and are untouched.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/generateSteps.ts",
+      "tests/generateSteps.test.ts",
+      "scripts/tackle-tasks/diagram-steps.json"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "New test in tests/generateSteps.test.ts, e.g. test_generateSteps_neverAddsTheRetiredPreambleOverride: run generateSteps on the real diagrams/tackle-tasks folder, find the Q_PREAMBLE_STATUS_CHECK entry for pipeline-preambleStatusCheck.mmd, and assert it has no nextBlock key, no translator key, and a next array that contains \"Q_IS_TASK_BLOCKED_Q\". Comment out (do not delete): test_generateSteps_addsANextBlockOverrideOnThePreamblesFirstBlock, test_generateSteps_addsATranslatorOverrideOnThePreamblesFirstBlock, test_generateSteps_leavesTheNextBlockOverrideOffOutsideTheDefaultDiagramFolder, and test_generateSteps_leavesTheTranslatorOverrideOffOutsideTheDefaultDiagramFolder. Leave test_generateSteps_addsTheFastNextBlockOverrideOnAreTaskTestsSkipped and test_generateSteps_leavesTheFastNextBlockOverrideOffTheDefaultDiagramFolder untouched.",
+    "difficulty": 3,
+    "blockedBy": [
+      {
+        "taskNumber": 226,
+        "reason": "chain order: [mermaid 11] comes before [mermaid 12]"
+      }
+    ]
   }
 ]
