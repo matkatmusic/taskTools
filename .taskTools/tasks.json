@@ -1313,5 +1313,42 @@
         "reason": "chain order: [folder 7] comes before [folder 8]"
       }
     ]
+  },
+  {
+    "taskNumber": 239,
+    "version": "77b16841cae29d285bfd39f5fba2588a66dde1a1",
+    "title": "[folder 9] Goal: the awaitingTesting-folder chain holds",
+    "userDescription": "9. Goal: when a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it.\n\nUser ruling (2026-09-18): [folder 9] checks the literal goal written in the spec's item 9, not \"[folder 7] and [folder 8] hold\": when a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. Each goal line is a by-hand check of that statement with an exact command and exact expected output — for example: the branch state before the launch, the launch command, then `git worktree list` showing one folder named awaitingTesting on branch staging, and the staging tip containing the user's branch tip. Still check-only: no code change, hasTests false, tests \"\".",
+    "chainGoal": [
+      "When a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it. The chain is [folder 1] to [folder 9] from specs/awaiting-testing-folder.md."
+    ],
+    "goal": [
+      "- Before launching: on a branch with commits both staging lacks and that staging has ahead of it (diverged from staging), record `git rev-parse HEAD` for that branch and for `staging`, pasted.",
+      "- Launching a tackle-tasks run (e.g. `/tackle-tasks`) on that diverged branch completes with no throw, with the run command and its output pasted.",
+      "- Afterward, `git -C <repo> worktree list` shows exactly one shared-checkout line ending `awaitingTesting [staging]`, with no line for a folder named plain `staging`, with the command and its output pasted.",
+      "- `git -C <the awaitingTesting path> branch --show-current` prints `staging`, not the user's own branch name, with the command and its output pasted.",
+      "- `git -C <the awaitingTesting path> merge-base --is-ancestor <the user's branch tip recorded above> HEAD` exits 0, confirming the user's branch tip landed in staging's tip through the merge or fast-forward, with the command and its exit code pasted.",
+      "- With the `awaitingTesting` folder first put on the wrong branch and left holding no work (`git -C <the awaitingTesting path> status --porcelain` prints nothing), a fresh tackle-tasks run rebuilds it onto `staging` with no throw: the run's exit code is 0 and `git -C <the awaitingTesting path> branch --show-current` prints `staging` afterward, with the setup steps, the run command, and its output pasted."
+    ],
+    "notInScope": [
+      "- Any code change: this is a check-only task, like every other \"Goal:\" item in this spec.",
+      "- Adding a permanent automated fixture for the diverged-branch or broken-folder setup: both are done by hand for this check only."
+    ],
+    "problemSolvedByTask": "Check-only item: proves by hand, with real commands and pasted output, that the chain's own literal stated goal holds today — a diverged branch drives a merge or fast-forward of staging inside one shared awaitingTesting folder, that folder is never checked out to the user's own branch, and a broken, work-free folder repairs itself with no throw.",
+    "description": "This is a check-only task with no code change. It proves by hand, with real commands and pasted output, the exact statement specs/awaiting-testing-folder.md's item 9 copies from the file's own opening paragraph: a tackle-tasks run on a branch diverged from staging merges or fast-forwards staging inside one shared checkout folder named awaitingTesting; that folder sits on staging both before and after the run, never on the user's own branch; and when the folder is left on the wrong branch holding no work, a run rebuilds it onto staging without throwing. Each clause gets its own by-hand check: a diverged-branch run followed by `git worktree list` and a `merge-base --is-ancestor` check proves the merge-or-fast-forward and folder-naming clauses, a `branch --show-current` check on the shared folder proves it is never the user's own branch, and a broken-and-empty-folder setup followed by a rerun that exits 0 proves the self-repair clause.",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 1,
+    "blockedBy": [
+      {
+        "taskNumber": 238,
+        "reason": "chain order: [folder 8] comes before [folder 9]"
+      }
+    ]
   }
 ]
