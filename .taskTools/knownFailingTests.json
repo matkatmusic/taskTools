@@ -10,5 +10,9 @@
   {
     "file": "tests/runStepHook.test.ts",
     "name": "test_runStepHook_reportsAHeldLockInsteadOfHangingOnPostToolUseSkill"
+  },
+  {
+    "file": "tests/workflowAgentOptions.test.ts",
+    "name": "test_workflow_aBareStartingBlockGetsThatBlocksAgentOptions"
   }
 ]
