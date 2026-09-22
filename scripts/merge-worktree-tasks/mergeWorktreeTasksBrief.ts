@@ -7,6 +7,7 @@ const mergeTaskWorktreesPath = fileURLToPath(new URL("./mergeTaskWorktrees.ts", 
 
 const unmergedWorktrees = execFileSync("node", [mergeTaskWorktreesPath, "--discover"], { encoding: "utf8" }).trimEnd();
 
+// RETIRED (task 236): "work is now on your own branch, the one you ran --discover on"
 export const brief = `- repo root: ${repoRoot}
 - unmerged worktrees: ${unmergedWorktrees}
 
@@ -43,7 +44,7 @@ For every approved worktree, run:
 Each call prints one \`MergeOutcome\` JSON object. If \`merged: true\`, the
 worktree and its branch are already removed by the script — report success
 and, if it had matched task numbers, note that those tasks' work is now on
-the branch you were on when you ran \`--discover\`. If \`merged: false\`, report
+the \`staging\` branch in the \`awaitingTesting\` folder. If \`merged: false\`, report
 \`conflictedFilePaths\` / \`failureReason\` and leave it — the worktree is still
 on disk for manual resolution; do not retry the merge automatically and do
 not delete the worktree yourself.
