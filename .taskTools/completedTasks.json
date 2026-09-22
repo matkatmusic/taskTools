@@ -9807,5 +9807,133 @@
     "completionDate": "2026-09-22",
     "closureNote": "closed manually by user; check-only task, its branch has no commits so the merge cannot record it",
     "commitHashes": []
+  },
+  {
+    "taskNumber": 241,
+    "version": "9ce5a5fd3b1bcb38269c946848122656933037f4",
+    "title": "[launch 2] All steps of specs/diagrams-in-mermaid-viewer-format.md are done",
+    "userDescription": "2. All steps of `specs/diagrams-in-mermaid-viewer-format.md` are done.\n   WHY: step 11 of that list installs `plans/preamble-revised.mmd` as the live preamble. The generator then writes a stub that throws for each of the 11 new blocks. Every block step below fills in one or more of those stubs. That list also settles how a decision script's `next` follows the diagram.\n\nUser ruling (2026-09-18): READY with a check-only goal: every entry made from `specs/diagrams-in-mermaid-viewer-format.md` is in completedTasks.json. blockedBy the [mermaid 15] entry.",
+    "chainGoal": [
+      "A tackle-tasks launch reaches the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet. The chain is [launch 1] to [launch 22] from specs/launch-reaches-planning-alone.md."
+    ],
+    "goal": [
+      "- `jq '[.[] | select(.title | startswith(\"[mermaid \"))] | length' .taskTools/completedTasks.json` in the mermaid worktree returns `15`, with the command run and its output pasted.",
+      "- `jq -r '.[] | select(.title | startswith(\"[mermaid \")) | .title' .taskTools/completedTasks.json` lists exactly `[mermaid 1]` through `[mermaid 15]`, one each and none missing, with the command run and its output pasted."
+    ],
+    "notInScope": [
+      "- Implementing any of [mermaid 1] through [mermaid 15]: each is its own chain entry, not this task's job.",
+      "- Checking `specs/awaiting-testing-folder.md`'s items: that is [launch 3]."
+    ],
+    "problemSolvedByTask": "Check-only item: the check proves the [mermaid] chain, which installs the new preamble and its 11 new-block stubs, is fully archived to completedTasks.json before any [launch] item that fills in one of those stubs builds on it.",
+    "description": "This is a check-only task with no code change, following the user ruling that this item's goal is a completedTasks.json count and name check rather than a re-derivation of each mermaid step's WHY/HOW. It confirms every entry from [mermaid 1] through [mermaid 15], made from specs/diagrams-in-mermaid-viewer-format.md, is archived in .taskTools/completedTasks.json in the mermaid worktree, both by count (15) and by name (no gap, no duplicate).",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 1,
+    "blockedBy": [],
+    "run": {
+      "active": false,
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/mermaid-62164a4b/task-241",
+      "leaseRunId": "b1c2726a-938d-484a-9805-a5a3ced2b2f2",
+      "history": [
+        {
+          "runId": "b1c2726a-938d-484a-9805-a5a3ced2b2f2",
+          "startedAt": "2026-09-22T10:17:08-07:00",
+          "endedAt": "2026-09-22T10:33:19-07:00",
+          "exitType": "merge-failed",
+          "exitNote": "paused, merge-failed: nothing landed after 2 merge attempts (task branch \"task-241\" is already merged in occurrence \"root\", but its merge-time commit record is missing; refusing to guess from the current staging tip). worktree preserved. Find out why the merge failed from the run log and packets under .taskTools/runs. Fixable: fix it, then run /tackle-tasks [241] MERGE_WORKTREES to merge again. Not fixable: ask the user what to do.",
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": {
+            "stepId": "run-full-suite-0",
+            "passed": true,
+            "testFiles": [],
+            "createdTestFiles": [],
+            "deletedTestFiles": [],
+            "missingTests": false,
+            "output": "",
+            "newFailingTests": [],
+            "knownFailingTests": [],
+            "checkedAt": "2026-09-22T10:33:13-07:00"
+          },
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            },
+            {
+              "stepId": "rebase",
+              "script": "rebaseTaskWorktree",
+              "result": {
+                "lock": "acquired",
+                "heldByOwner": null,
+                "recoveryCommand": null,
+                "conflicted": false,
+                "stoppedAt": null,
+                "conflictedFilePaths": [],
+                "failureReason": null
+              },
+              "occurrenceIds": [
+                ""
+              ],
+              "worktreeHeads": [
+                {
+                  "occurrenceId": "",
+                  "head": "e55b9ef52273f132d28676f22db94c40f05d1ee5"
+                }
+              ]
+            }
+          ],
+          "tailCursor": null,
+          "sourceTipsAtRebase": [
+            {
+              "occurrenceId": "",
+              "baseBranch": "staging",
+              "sourceTip": "e55b9ef52273f132d28676f22db94c40f05d1ee5"
+            }
+          ],
+          "rebaseStepReceipt": {
+            "stepId": "rebase",
+            "occurrenceIds": [
+              ""
+            ],
+            "worktreeHeads": [
+              {
+                "occurrenceId": "",
+                "head": "e55b9ef52273f132d28676f22db94c40f05d1ee5"
+              }
+            ],
+            "sourceTips": [
+              {
+                "occurrenceId": "",
+                "baseBranch": "staging",
+                "sourceTip": "e55b9ef52273f132d28676f22db94c40f05d1ee5"
+              }
+            ]
+          },
+          "attempts": {
+            "merge": 2
+          },
+          "countedPasses": {
+            "merge": [
+              "0b9a33e9-bbfb-4a25-a7e4-117522a3efef",
+              "c61dd8a3-7643-43a0-9f51-082e2aecca1a"
+            ]
+          }
+        }
+      ]
+    },
+    "completionDate": "2026-09-22",
+    "closureNote": "closed manually by user; check-only task passed its check (15 mermaid tasks archived) but its branch has no commits so the merge cannot record it",
+    "commitHashes": []
   }
 ]
