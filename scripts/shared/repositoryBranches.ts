@@ -74,6 +74,6 @@ export function collectRepositorySources(repoRoot: string, rootBranch: string): 
 // -B, not -b: a branch left behind by an earlier run must be reset onto HEAD, never reused as-is.
 export function createBranchInEveryRepository(repoRoot: string, paths: string[], branchName: string): void {
     for (const path of paths) {
-        git(path === "" ? repoRoot : join(repoRoot, path), "checkout", "-B", branchName);
+        git(path === "" ? repoRoot : join(repoRoot, path), "checkout", "-q", "-B", branchName);
     }
 }

@@ -17,7 +17,7 @@ const TEMPLATE = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
 
 const BASE: CommitMergeConflictFixIfNeededPacket = {
     box: "CONTINUE_REBASE", scriptSignal: "continue", taskNumber: 1, runId: "run-1", projectRoot: "/repo",
-    worktree: "/repo/.worktrees/task-1", branch: "task-1", exitType: "", exitNote: "", message: "", additionalData: {},
+    worktree: "/repo/.worktrees/task-1", branch: "task-1", docsMode: "", planFile: "", exitType: "", exitNote: "", message: "", additionalData: {},
     stoppedOccurrenceId: "", stoppedCheckoutPath: "", conflictedFilePaths: [], conflicted: false, finished: false, failureReason: "",
 };
 

@@ -7,7 +7,7 @@ import { taskBranchName } from "./createTaskWorktree.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 
 function git(worktreePath: string, ...args: string[]): string {
-    return execFileSync("git", ["-C", worktreePath, ...args], { encoding: "utf8" }).trim();
+    return execFileSync("git", ["-C", worktreePath, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
 }
 
 export type CheckTaskWorktreeSafeOutput = { safe: boolean; problems: string[] };

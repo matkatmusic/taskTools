@@ -2,18 +2,18 @@
     "input": {
         "box": "WRITE_EXIT_TYPE_COMPLETED",
         "scriptSignal": "continue",
-        "projectRoot": "/tmp/example-project",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/mergeSucceededExit/fixtures",
         "taskNumber": 42,
         "runId": "run-abc123",
-        "worktree": "/tmp/example-project/.worktrees/task-42",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/mergeSucceededExit/fixtures/.worktrees/task-42",
         "branch": "main"
     },
     "output": {
         "box": "RECORD_MODIFIED_FILES_SUCCESS",
         "scriptSignal": "continue",
-        "projectRoot": "/tmp/example-project",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/mergeSucceededExit/fixtures",
         "taskNumber": 42,
         "runId": "run-abc123",
-        "worktree": "/tmp/example-project/.worktrees/task-42"
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/mergeSucceededExit/fixtures/.worktrees/task-42"
     }
 }

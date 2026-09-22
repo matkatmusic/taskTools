@@ -123,11 +123,13 @@ let STEPS_BY_KEY: Map<string, Step>;
 
 // A bare box id names its own diagram; one with :: names another.
 function getStepKey(boxReference: string, fromDiagram: string): string {
-  if (boxReference.includes("::")) {
+  const isFullKey = boxReference.includes("::");
+  if (isFullKey) {
     return boxReference;
   }
   const sameDiagramKey = `${fromDiagram}::${boxReference}`;
-  if (STEPS_BY_KEY.has(sameDiagramKey)) {
+  const isInSameDiagram = STEPS_BY_KEY.has(sameDiagramKey);
+  if (isInSameDiagram) {
     return sameDiagramKey;
   }
   return getStepKeysNamingBox(boxReference)[0] ?? sameDiagramKey;
@@ -178,12 +180,24 @@ function parseStepResult(commandOutput: string): Record<string, unknown> | null 
 
 // Every repo's HEAD before this block runs; a block reset restores each to what's recorded here.
 function buildRewindPoints(worktree: string): Record<string, string> {
-  if (worktree === "" || spawnSync("git", ["-C", worktree, "rev-parse", "--is-inside-work-tree"], { encoding: "utf8" }).status !== 0) {
+  const hasNoWorktree = worktree === "";
+  if (hasNoWorktree) {
+    return {};
+  }
+  const isInsideWorkTree = spawnSync("git", ["-C", worktree, "rev-parse", "--is-inside-work-tree"], { encoding: "utf8" }).status === 0;
+  if (!isInsideWorkTree) {
     return {};
   }
   const rewindPoints: Record<string, string> = {};
   // ponytail: plain git lists the submodules; branch discovery refuses a gitlink that only a task-N branch holds.
-  const submodulePaths = spawnSync("git", ["-C", worktree, "submodule", "foreach", "--recursive", "--quiet", "echo \"$displaypath\""], { encoding: "utf8" }).stdout.split("\n").filter(Boolean);
+  const submodulePathLines = spawnSync("git", ["-C", worktree, "submodule", "foreach", "--recursive", "--quiet", "echo \"$displaypath\""], { encoding: "utf8" }).stdout.split("\n");
+  const submodulePaths: string[] = [];
+  for (const line of submodulePathLines) {
+    const isNonEmptyLine = line !== "";
+    if (isNonEmptyLine) {
+      submodulePaths.push(line);
+    }
+  }
   for (const occurrenceId of ["", ...submodulePaths]) {
     const path = occurrenceId === "" ? worktree : join(worktree, occurrenceId);
     rewindPoints[occurrenceId] = spawnSync("git", ["-C", path, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
@@ -264,7 +278,12 @@ function isInsideSourceLock(stepKey: string): number {
   if (lockStepKey === undefined)
     return SOURCE_LOCK_UNREACHABLE;
   const reached = new Set<string>();
-  for (const toVisit = [...STEPS_BY_KEY.get(lockStepKey)!.next.map((box) => getStepKey(box, STEPS_BY_KEY.get(lockStepKey)!.diagram))]; toVisit.length > 0;) {
+  const lockStep = STEPS_BY_KEY.get(lockStepKey)!;
+  const toVisit: string[] = [];
+  for (let index = 0; index < lockStep.next.length; index++) {
+    toVisit.push(getStepKey(lockStep.next[index], lockStep.diagram));
+  }
+  while (toVisit.length > 0) {
     const visiting = toVisit.pop()!;
     const step = STEPS_BY_KEY.get(visiting);
     const isUnknownStep = step === undefined;
@@ -277,7 +296,9 @@ function isInsideSourceLock(stepKey: string): number {
     if (isExitDiagram)
       continue;
     reached.add(visiting);
-    toVisit.push(...step.next.map((box) => getStepKey(box, step.diagram)));
+    for (let index = 0; index < step.next.length; index++) {
+      toVisit.push(getStepKey(step.next[index], step.diagram));
+    }
   }
   return reached.has(stepKey) ? SOURCE_LOCK_REACHABLE : SOURCE_LOCK_UNREACHABLE;
 }
@@ -292,10 +313,17 @@ function buildFailure(
   const runLogEntries = existsSync(logFile()) ? readJsonFile(logFile()) as unknown[] : [];
   runLogEntries.push({ block: "FAILURE", invocation, ran: boxesRun, errors });
   writeJsonAtomically(logFile(), runLogEntries);
-  const report = `The workflow failed to complete successfully: ${errors.join("\n")}\nSee ${runDirectory} for specific inputs and outputs of each run-step block's execution.`;
+  let report = `The workflow failed to complete successfully: ${errors.join("\n")}\nSee ${runDirectory} for specific inputs and outputs of each run-step block's execution.`;
   if (context === null)
     return { ok: false, ran: boxesRun, errors, outcome: null, report };
-  if (EXIT_DIAGRAMS.includes(context.step.diagram))
+  // A failed walk leaves no outcome, so a restart reads the failed block's input packet.
+  mkdirSync(packetsDirectory(), { recursive: true });
+  const payloadOrdinal = String(readdirSync(packetsDirectory()).length).padStart(2, "0");
+  const payload = join(packetsDirectory(), `${payloadOrdinal}-${String(context.packet.box)}-${process.pid}.json`);
+  writeJsonAtomically(payload, context.packet);
+  report += `\nRestart from the last good block with {"packetFile":"${payload}"}`;
+  const isExitDiagram = EXIT_DIAGRAMS.includes(context.step.diagram);
+  if (isExitDiagram)
     return { ok: false, ran: boxesRun, errors, outcome: null, report };
   const worktree = typeof context.packet.worktree === "string" ? context.packet.worktree : "";
   const worktreeExists = worktree !== "" && existsSync(worktree);
@@ -311,7 +339,15 @@ function buildFailure(
   const sourceLockHeld = isInsideSourceLock(stepKey) === SOURCE_LOCK_REACHABLE;
   const consumedAPrompt = context.startedFromPacketFile && boxesRun.length === 1;
   // The run log keeps the whole stack; the note keeps the thrown message line only, when there is one.
-  const thrownMessageLine = errors.slice(1).join("\n").split("\n").find((line) => /^\w*Error: /.test(line));
+  const errorLines = errors.slice(1).join("\n").split("\n");
+  let thrownMessageLine: string | undefined;
+  for (const line of errorLines) {
+    const isThrownMessageLine = /^\w*Error: /.test(line);
+    if (isThrownMessageLine) {
+      thrownMessageLine = line;
+      break;
+    }
+  }
   const exitNote = thrownMessageLine === undefined ? errors.join("\n") : `${errors[0]}\n${thrownMessageLine}`;
   const consumedAPromptWithNoCheckpoint = consumedAPrompt && existing === null;
   if (consumedAPromptWithNoCheckpoint) {
@@ -478,7 +514,9 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
     // Every hop's payload must match the next block's declared input, not just the walk's first hop.
     const inputMismatches = getStartInputMismatches(step, input);
     if (inputMismatches.length > 0) {
-      return buildFailure(boxesRun, [`${stepKey} input breaks its contract`, ...inputMismatches], { step, packet, input, startedFromPacketFile });
+      // A malformed start invocation has no run to fail, so the first hop never enters the failuresExit tail.
+      const isFirstHop = boxesRun.length === 0;
+      return buildFailure(boxesRun, [`${stepKey} input breaks its contract`, ...inputMismatches], isFirstHop ? null : { step, packet, input, startedFromPacketFile });
     }
     // A prompt block runs under its own model; the walk stops and names it for the next agent.
     if (step.producesPrompt && boxesRun.length > 0) {
@@ -564,7 +602,11 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
       if (chosenNextBox === undefined) {
         return buildFailure(boxesRun, [`${stepKey} points at ${step.next.join(", ")}; its output must name one in next`], { step, packet, input, startedFromPacketFile });
       }
-      if (!step.next.includes(String(chosenNextBox))) {
+      const isDrawnArrow = step.next.includes(String(chosenNextBox));
+      // A saved rebase target may be a full `<diagram>::<box>` key outside the arrows, naming a real block.
+      const isFullKeyOfRealBlock = String(chosenNextBox).includes("::") && STEPS_BY_KEY.has(String(chosenNextBox));
+      const isAllowedNext = isDrawnArrow || isFullKeyOfRealBlock;
+      if (!isAllowedNext) {
         return buildFailure(boxesRun, [`${stepKey} next ${JSON.stringify(chosenNextBox)} is not one of ${step.next.join(", ")}`], { step, packet, input, startedFromPacketFile });
       }
       nextStepKey = getStepKey(String(chosenNextBox), step.diagram);
@@ -693,9 +735,18 @@ STEPS_BY_KEY = buildStepsByKey(CONFIG);
 // Amended after review (F4): String(undefined) would silently become "undefined" for a start-less fixture; `as string` does not.
 START_STEP_KEY = CONFIG.start as string;
 const effectiveStartBoxId = startBoxId === "" ? START_STEP_KEY : startBoxId;
-const startStepKeys = effectiveStartBoxId.includes("::")
-  ? [effectiveStartBoxId].filter(stepKey => STEPS_BY_KEY.has(stepKey))
-  : getStepKeysNamingBox(effectiveStartBoxId);
+const isFullKey = effectiveStartBoxId.includes("::");
+let startStepKeys: string[];
+if (isFullKey) {
+  startStepKeys = [];
+  const isKnownStep = STEPS_BY_KEY.has(effectiveStartBoxId);
+  if (isKnownStep) {
+    startStepKeys.push(effectiveStartBoxId);
+  }
+}
+else {
+  startStepKeys = getStepKeysNamingBox(effectiveStartBoxId);
+}
 
 if (startStepKeys.length === 0) {
   const knownKeys = [...STEPS_BY_KEY.keys()].join(", ");

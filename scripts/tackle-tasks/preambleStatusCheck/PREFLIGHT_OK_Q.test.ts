@@ -99,7 +99,7 @@ test("test_checkScriptPathsInsideRoot_doesNotThrowWhenConfigHasATopLevelStartStr
     assert.doesNotThrow(() => checkScriptPathsInsideRoot(root));
 });
 
-test("test_PREFLIGHT_OK_Q_mainRoutesToMarkTaskActiveWhenEverythingPasses", () => {
+test("test_PREFLIGHT_OK_Q_mainRoutesToLockStagingForCatchUpWhenEverythingPasses", () => {
     const root = tempDir();
     mkdirSync(join(root, ".taskTools"), { recursive: true });
     writeFileSync(join(root, "a.ts"), "");
@@ -110,7 +110,7 @@ test("test_PREFLIGHT_OK_Q_mainRoutesToMarkTaskActiveWhenEverythingPasses", () =>
     writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber: 1, modifiableFiles: ["a.ts", "new.ts"], createsFiles: ["new.ts"] }]));
     writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]");
     const output = main(packet(root));
-    assert.equal(output.next, "B_MARK_TASK_ACTIVE");
+    assert.equal(output.next, "B_LOCK_STAGING_FOR_CATCH_UP");
     assert.equal(output.exitType, "");
 });
 

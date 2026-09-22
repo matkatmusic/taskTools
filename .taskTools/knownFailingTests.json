@@ -1,31 +1,11 @@
 [
   {
+    "file": "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/CONTINUE_REBASE.test.ts",
+    "name": "test_CONTINUE_REBASE_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress"
+  },
+  {
     "file": "tests/relatedTests.test.ts",
     "name": "test_main_readsTheTurnFlagOnStopAndReportsTypeErrors"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-commitMergeConflictFixIfNeeded_COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED_producesItsOutputContract"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-commitMergeConflictFixIfNeeded_CONTINUE_REBASE_producesItsOutputContract"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-mergeSucceededExit_RECORD_MERGE_COMMIT_HASHES_producesItsOutputContract"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-mergeSucceededExit_WRITE_EXIT_TYPE_COMPLETED_producesItsOutputContract"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-mergeSucceededExit_RECORD_MODIFIED_FILES_SUCCESS_producesItsOutputContract"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-mergeSucceededExit_CLEAN_UP_WORKTREES_producesItsOutputContract"
   },
   {
     "file": "tests/stepTemplates.test.ts",
@@ -34,14 +14,6 @@
   {
     "file": "tests/stepTemplates.test.ts",
     "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_AMEND_TASK_FILE_LIST_producesItsOutputContract"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_CREATE_WORKTREE_producesItsOutputContract"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_DOCUMENT_GENERATION_producesItsOutputContract"
   },
   {
     "file": "tests/stepTemplates.test.ts",
@@ -58,14 +30,6 @@
   {
     "file": "tests/stepTemplates.test.ts",
     "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_PROVE_SPLICE_DEMO_producesItsOutputContract"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_RESET_WORKTREE_producesItsOutputContract"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_TAKE_WORKTREE_LEASE_producesItsOutputContract"
   },
   {
     "file": "tests/stepTemplates.test.ts",
@@ -89,35 +53,11 @@
   },
   {
     "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-preambleStatusCheck_Q_DOES_WORKTREE_EXIST_Q_producesItsOutputContract"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
     "name": "test_stepTemplate_pipeline-preambleStatusCheck_Q_HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q_producesItsOutputContract"
   },
   {
     "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-preambleStatusCheck_Q_INIT_SUBMODULES_RECURSIVELY_producesItsOutputContract"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-preambleStatusCheck_Q_IS_WORKTREE_SAFE_TO_USE_Q_producesItsOutputContract"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-preambleStatusCheck_Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING_producesItsOutputContract"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
     "name": "test_stepTemplate_pipeline-preambleStatusCheck_Q_WAS_CATCH_UP_LOCK_ACQUIRED_Q_producesItsOutputContract"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-rebase_REBASE_ONTO_TARGET_BRANCH_producesItsOutputContract"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-whatDidThePlannerReturn_WRITE_CLARIFY_REQUEST_producesItsOutputContract"
   },
   {
     "file": "tests/stepTemplates.test.ts",

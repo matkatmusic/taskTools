@@ -32,3 +32,12 @@ cat > tasks.json <<'EOF'
     }
 ]
 EOF
+
+mkdir -p worktree/plans
+cat > worktree/plans/checkpoint.json <<'JSON'
+{
+  "taskNumber": 1, "passId": "fixture-pass", "runId": "run-1", "projectRoot": ".",
+  "block": "pipeline-whatDidThePlannerReturn.mmd::WHAT_DID_THE_PLANNER_RETURN", "input": "",
+  "state": "running", "sourceLockHeld": false, "exitType": "", "exitNote": "", "resumedFrom": null
+}
+JSON

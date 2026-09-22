@@ -29,7 +29,7 @@ function generateFrom(diagrams: Record<string, string>) {
     copyFileSync(join(PROJECT_ROOT, "scripts/shared/contracts.ts"), join(folder, "shared", "contracts.ts"));
     copyFileSync(join(PROJECT_ROOT, "scripts/shared/templateShape.ts"), join(folder, "shared", "templateShape.ts"));
     for (const [name, contents] of Object.entries(diagrams)) writeFileSync(join(diagramFolder, name), contents);
-    const run = () => narrow(generateSteps(diagramFolder, stepsRoot, configPath));
+    const run = () => narrow(generateSteps(diagramFolder, stepsRoot, configPath, true, true));
     return { config: run(), run, diagramFolder, stepsRoot, configPath, readConfig: () => JSON.parse(readFileSync(configPath, "utf8")) };
 }
 

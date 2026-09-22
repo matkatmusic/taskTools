@@ -612,6 +612,36 @@ test("test_runStepHook_failsWhenTheChosenBranchIsNotInNext", () => {
     assert.match(result.errors[0], /next "ELSEWHERE" is not one of B/);
 });
 
+test("test_runStepHook_takesAFullKeyNextThatNamesARealBlockOutsideItsArrows", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "continue", next: "two.mmd::Z" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
+        ],
+        "two.mmd": [
+            { box: "Z", script: writeStep("Z", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const { result } = runHook("/run-step A", configFile);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.ran, ["one.mmd::A", "two.mmd::Z"]);
+});
+
+test("test_runStepHook_failsWhenTheFullKeyNextNamesNoRealBlock", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "continue", next: "two.mmd::MISSING" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
+        ],
+        "two.mmd": [
+            { box: "Z", script: writeStep("Z", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const { result } = runHook("/run-step A", configFile);
+    assert.equal(result.ok, false);
+    assert.match(result.errors[0], /is not one of B/);
+});
+
 test("test_runStepHook_stopsWhenTheNextBoxIsNotInTheConfig", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["gone.mmd::MISSING"] }],
@@ -818,6 +848,32 @@ test("test_runStepHook_storesTheThreadedOutputAsThePasteableCommand", () => {
     const packetName = readdirSync(packetsFolder).find(name => /^\d+-B-\d+-2\.json$/.test(name))!;
     const packet = JSON.parse(readFileSync(join(packetsFolder, packetName), "utf8"));
     assert.match(packet.command, /node --no-inspect .*B\.ts '\{"box":"A","scriptSignal":"continue","input":""\}'/);
+});
+
+test("test_runStepHook_writesARestartablePayloadPacketWhenABlockThrows", () => {
+    // A thrown block leaves no outcome, so the agent needs the packet the block got.
+    const configFile = configWith((writeStep, folder) => {
+        const throwScriptPath = join(folder, "B-throw.ts");
+        writeFileSync(throwScriptPath, "throw new Error('B blew up');\n");
+        return {
+            "one.mmd": [
+                { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
+                { box: "B", script: throwScriptPath, next: [] },
+            ],
+        };
+    });
+    // Run the walk: A succeeds, then B throws.
+    const { result, logFile } = runHook("/run-step A", configFile);
+    assert.equal(result.ok, false);
+    // The packets folder holds a payload packet named for the last good block.
+    const packetsFolder = join(dirname(logFile), "packets");
+    const payloadName = readdirSync(packetsFolder).find(name => /^\d+-A-\d+\.json$/.test(name));
+    assert.ok(payloadName !== undefined);
+    // That payload holds A's output packet, which is the input B received.
+    const payload = JSON.parse(readFileSync(join(packetsFolder, payloadName), "utf8"));
+    assert.deepEqual(payload, { box: "A", scriptSignal: "continue", input: "" });
+    // The report names that payload path, so the agent can restart from it.
+    assert.ok(String(result.report).includes(`Restart from the last good block with {"packetFile":"${join(packetsFolder, payloadName)}"}`));
 });
 
 // PostToolUse names the skill and its args apart. That is how an agent reaches the hook.

@@ -74,6 +74,7 @@ function stopRebaseOnConflict(rootOrigin: string, worktreePath: string): void {
 function answer(projectRoot: string, worktree: string, taskNumber: number, runId: string): string {
     const packet: CommitMergeConflictFixIfNeededPacket = {
         box: "FIX_CONFLICTS", scriptSignal: "continue", taskNumber, runId, projectRoot, worktree, branch: `task-${taskNumber}`,
+        docsMode: "", planFile: "",
         exitType: "", exitNote: "", message: "resolved the conflict", additionalData: { resolved: true, unresolvedPaths: [] }, stoppedOccurrenceId: "",
         stoppedCheckoutPath: worktree, conflictedFilePaths: ["resolved.txt"], conflicted: true, finished: false, failureReason: "",
     };

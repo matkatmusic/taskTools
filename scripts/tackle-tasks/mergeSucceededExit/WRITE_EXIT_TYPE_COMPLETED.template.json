@@ -2,20 +2,20 @@
     "input": {
         "box": "RECORD_MERGE_COMMIT_HASHES",
         "scriptSignal": "continue",
-        "projectRoot": "/tmp/example-project",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/mergeSucceededExit/fixtures",
         "taskNumber": 42,
         "runId": "run-abc123",
-        "worktree": "/tmp/example-project/.worktrees/task-42",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/mergeSucceededExit/fixtures/.worktrees/task-42",
         "branch": "main",
         "exitNote": "All layers merged successfully."
     },
     "output": {
         "box": "WRITE_EXIT_TYPE_COMPLETED",
         "scriptSignal": "continue",
-        "projectRoot": "/tmp/example-project",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/mergeSucceededExit/fixtures",
         "taskNumber": 42,
         "runId": "run-abc123",
-        "worktree": "/tmp/example-project/.worktrees/task-42",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/mergeSucceededExit/fixtures/.worktrees/task-42",
         "branch": "main"
     }
 }

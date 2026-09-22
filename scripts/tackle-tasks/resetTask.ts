@@ -92,7 +92,14 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     }
   }
   const reachedFromLock = new Set<string>();
-  const toVisit = lockStepKey === undefined ? [] : stepsByKey.get(lockStepKey)!.next.map((box) => getStepKey(box, stepsByKey.get(lockStepKey)!.diagram));
+  const hasLockStep = lockStepKey !== undefined;
+  const toVisit: string[] = [];
+  if (hasLockStep) {
+    const lockStep = stepsByKey.get(lockStepKey!)!;
+    for (let index = 0; index < lockStep.next.length; index++) {
+      toVisit.push(getStepKey(lockStep.next[index], lockStep.diagram));
+    }
+  }
   while (toVisit.length > 0) {
     const visiting = toVisit.pop()!;
     const step = stepsByKey.get(visiting);
@@ -180,6 +187,63 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
   const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, `task-${taskNumber}`);
   const leasePath = `${worktreePath}.lease`;
   const branchName = `task-${taskNumber}`;
+  const runsDirectory = join(repoRoot, ".taskTools", "runs");
+  let runId = "";
+  let input = "";
+  let rewindPoints: Record<string, string> = {};
+
+  // A block reset that must throw should change nothing first: worktree/packet checks run before any mutation below.
+  if (block !== "") {
+    const taskRecord = openIndex !== -1 ? tasks[openIndex] : completed[completedIndex];
+    runId = taskRecord.run.history[taskRecord.run.history.length - 1].runId;
+    const isOpenTask = openIndex !== -1;
+    if (isOpenTask && !existsSync(worktreePath))
+      throw new Error(`task ${taskNumber} has no worktree at ${worktreePath}; a reset to a block needs one`);
+
+    // The block's input is the quoted argument of its newest packet this run, like resumeRun.ts findStartAtBlockEntry.
+    const packetNamePattern = new RegExp(`^\\d+-${block}-\\d+-\\d+\\.json$`);
+    let newestMtimeMs = -Infinity;
+    let newestInput: string | null = null;
+    for (const stampEntry of existsSync(runsDirectory) ? readdirSync(runsDirectory) : []) {
+      const packetsFolder = join(runsDirectory, stampEntry, "packets");
+      if (!existsSync(packetsFolder))
+        continue;
+      for (const packetName of readdirSync(packetsFolder)) {
+        if (!packetNamePattern.test(packetName))
+          continue;
+        const packetPath = join(packetsFolder, packetName);
+        const packetJson = JSON.parse(readFileSync(packetPath, "utf-8"));
+        const commandLine: string = packetJson.command;
+        const quoteStart = commandLine.indexOf("'");
+        if (quoteStart === -1)
+          continue;
+        let raw = "";
+        let charIndex = quoteStart + 1;
+        while (charIndex < commandLine.length) {
+          if (commandLine.slice(charIndex, charIndex + 4) === `'\\''`) {
+            raw += "'";
+            charIndex += 4;
+            continue;
+          }
+          if (commandLine[charIndex] === "'")
+            break;
+          raw += commandLine[charIndex];
+          charIndex += 1;
+        }
+        if (JSON.parse(raw).runId !== runId)
+          continue;
+        const mtimeMs = statSync(packetPath).mtimeMs;
+        if (mtimeMs <= newestMtimeMs)
+          continue;
+        newestMtimeMs = mtimeMs;
+        newestInput = raw;
+        rewindPoints = packetJson.rewindPoints ?? {};
+      }
+    }
+    if (newestInput === null)
+      throw new Error(`no packet for block ${block} of run ${runId} under ${runsDirectory}`);
+    input = newestInput;
+  }
 
   // A full reset (block === "") removes the worktree/branch in every repo via removeTaskWorktreeAndBranches below.
   if (scope.worktree === true) {
@@ -207,7 +271,6 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
   //     rmSync(join(repoRoot, ".taskTools", "runs", entry, "packets"), { recursive: true, force: true });
   // }
   // Only this task's run directories go: each packet JSON names its taskNumber.
-  const runsDirectory = join(repoRoot, ".taskTools", "runs");
   for (const runDirectory of existsSync(runsDirectory) ? readdirSync(runsDirectory).map((entry) => join(runsDirectory, entry)) : []) {
     const packetsDirectory = join(runDirectory, "packets");
     if (!existsSync(packetsDirectory))
@@ -338,8 +401,6 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
   }
 
   if (block !== "") {
-    const runState = tasks.find((t: any) => t.taskNumber === taskNumber).run;
-    const runId: string = runState.history[runState.history.length - 1].runId;
     if (scope.counters === true)
       resetAttemptCounts(taskNumber, runId, repoRoot);
     if (!existsSync(worktreePath))
@@ -349,57 +410,20 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     //     execSync(`git checkout ${branchName}`, { cwd: join(worktreePath, path), stdio: "pipe" });
     // }
 
-    // The block's input is the quoted argument of its newest packet this run, like resumeRun.ts findStartAtBlockEntry.
-    const packetNamePattern = new RegExp(`^\\d+-${block}-\\d+-\\d+\\.json$`);
-    let newestMtimeMs = -Infinity;
-    let input: string | null = null;
-    let rewindPoints: Record<string, string> = {};
-    for (const stampEntry of existsSync(runsDirectory) ? readdirSync(runsDirectory) : []) {
-      const packetsFolder = join(runsDirectory, stampEntry, "packets");
-      if (!existsSync(packetsFolder))
-        continue;
-      for (const packetName of readdirSync(packetsFolder)) {
-        if (!packetNamePattern.test(packetName))
-          continue;
-        const packetPath = join(packetsFolder, packetName);
-        const packetJson = JSON.parse(readFileSync(packetPath, "utf-8"));
-        const commandLine: string = packetJson.command;
-        const quoteStart = commandLine.indexOf("'");
-        if (quoteStart === -1)
-          continue;
-        let raw = "";
-        let charIndex = quoteStart + 1;
-        while (charIndex < commandLine.length) {
-          if (commandLine.slice(charIndex, charIndex + 4) === `'\\''`) {
-            raw += "'";
-            charIndex += 4;
-            continue;
-          }
-          if (commandLine[charIndex] === "'")
-            break;
-          raw += commandLine[charIndex];
-          charIndex += 1;
-        }
-        if (JSON.parse(raw).runId !== runId)
-          continue;
-        const mtimeMs = statSync(packetPath).mtimeMs;
-        if (mtimeMs <= newestMtimeMs)
-          continue;
-        newestMtimeMs = mtimeMs;
-        input = raw;
-        rewindPoints = packetJson.rewindPoints ?? {};
-      }
-    }
-    if (input === null)
-      throw new Error(`no packet for block ${block} of run ${runId} under ${runsDirectory}`);
-
+    // A worktree re-made by plain `git worktree add` has empty submodule folders; git would then run in the parent repo.
+    initializeSubmodulesInWorktree(worktreePath);
     // Deepest submodule path first, root ("") last: task-N is already checked out at the root.
     for (const [occurrenceId, oid] of Object.entries(rewindPoints).sort(([a], [b]) => b.length - a.length)) {
       const path = occurrenceId === "" ? worktreePath : join(worktreePath, occurrenceId);
       if (occurrenceId === "") {
         // A skip-worktree entry (a generated file the brief isolates) fails a hard reset; lift the flag, reset, restore.
-        const skipWorktreePaths = execSync("git ls-files -v", { cwd: path, encoding: "utf8" })
-          .split("\n").filter((line) => line.startsWith("S ")).map((line) => line.slice(2));
+        const skipWorktreePaths: string[] = [];
+        for (const line of execSync("git ls-files -v", { cwd: path, encoding: "utf8" }).split("\n")) {
+          const isSkipWorktreeEntry = line.startsWith("S ");
+          if (isSkipWorktreeEntry) {
+            skipWorktreePaths.push(line.slice(2));
+          }
+        }
         const skipWorktreeContents = new Map<string, Buffer>();
         for (const skipWorktreePath of skipWorktreePaths) {
           const fullPath = join(path, skipWorktreePath);

@@ -8,6 +8,7 @@ import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 // import { modifiableFiles, readStagingTip } from "../../shared/prepareTasks.ts";
 // import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
 import type { EntryPacket } from "./_packet.ts";
+import type { StepConfig, StepConfigEntry } from "../generateSteps.ts";
 
 const MINIMUM_FREE_BYTES = 5 * 1024 * 1024 * 1024;
 
@@ -73,28 +74,38 @@ export function checkDuplicateHookRegistration(projectRoot: string): string | nu
   }
   for (const [groupKey, scriptNames] of scriptNamesByGroupKey) {
     const [event = "", matcher = ""] = groupKey.split("::");
-    const duplicate = scriptNames.find((name, index) => scriptNames.indexOf(name) !== index);
-    if (duplicate !== undefined)
-      return `"${duplicate}" is registered more than once for event "${event}" matcher "${matcher}"`;
+    let sawDuplicate = false;
+    let duplicateName = "";
+    for (let index = 0; index < scriptNames.length; index++) {
+      const name = scriptNames[index]!;
+      const isRepeat = scriptNames.indexOf(name) !== index;
+      if (isRepeat) {
+        sawDuplicate = true;
+        duplicateName = name;
+        break;
+      }
+    }
+    if (sawDuplicate)
+      return `"${duplicateName}" is registered more than once for event "${event}" matcher "${matcher}"`;
   }
   return null;
 }
 
 export function checkScriptPathsInsideRoot(projectRoot: string): string | null {
   const stepsConfigPath = join(projectRoot, "scripts", "tackle-tasks", "diagram-steps.json");
-  const config = readJsonIfExists(stepsConfigPath) as Record<string, Array<{ script: string }> | string> | null;
+  const config = readJsonIfExists(stepsConfigPath) as StepConfig | null;
   if (config === null)
     return null;
   const scriptsRoot = resolve(projectRoot, "scripts");
-  for (const entries of Object.values(config)) {
-    const isStartValue = typeof entries === "string";
-    if (isStartValue) {
-      continue;
-    }
+  const { start: _start, ...diagrams } = config;
+  const diagramLists = diagrams as Record<string, StepConfigEntry[]>;
+  for (const entries of Object.values(diagramLists)) {
     for (const entry of entries) {
       const resolvedScript = resolve(projectRoot, entry.script);
       const relativeToRoot = relative(scriptsRoot, resolvedScript);
-      if (relativeToRoot.startsWith("..") || isAbsolute(relativeToRoot)) {
+      const startsWithParentSegment = relativeToRoot.startsWith("..");
+      const isAbsolutePath = isAbsolute(relativeToRoot);
+      if (startsWithParentSegment || isAbsolutePath) {
         return `"${entry.script}" resolves outside "${scriptsRoot}"`;
       }
     }
@@ -139,7 +150,7 @@ export function main(input: string): EntryPacket & { next: string } {
   //         next: "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
   //     };
   // }
-  return { ...packet, box: "Q_PREFLIGHT_OK_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "B_MARK_TASK_ACTIVE" };
+  return { ...packet, box: "Q_PREFLIGHT_OK_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "B_LOCK_STAGING_FOR_CATCH_UP" };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

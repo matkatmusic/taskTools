@@ -85,6 +85,83 @@ test("test_resetTask_atBlock_appliesTheBlocksResetScope", async () => {
     }
 });
 
+test("test_resetTask_atBlock_leavesTheSourceLockUntouchedWhenNoPacketExistsForTheBlock", async () => {
+    // Setup: task 9 is open, its worktree exists, but no packet names RUN_TASK_TESTS for this run.
+    const repoRoot = makeTempRepoWithCommit();
+    const cwd = process.cwd();
+    const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
+    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    try {
+        const runId = "r1";
+        mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
+        writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{
+            taskNumber: 9,
+            title: "t",
+            difficulty: 4,
+            run: {
+                active: false, worktree: null, leaseRunId: null,
+                history: [{
+                    runId, startedAt: "t", endedAt: "t2", exitType: "tests-red", exitNote: "n",
+                    modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+                }],
+            },
+        }]));
+        writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), "[]");
+
+        git(repoRoot, "branch", "task-9");
+        git(repoRoot, "worktree", "add", worktreePath, "task-9");
+
+        writeFileSync(join(repoRoot, ".git", "taskTools-source.lock"), "held");
+
+        // Action + verification: reset at RUN_TASK_TESTS with no packet for that block rejects, and changes nothing first.
+        process.chdir(repoRoot);
+        await assert.rejects(resetTask(9, "RUN_TASK_TESTS"), /no packet for block/);
+        assert.ok(existsSync(join(repoRoot, ".git", "taskTools-source.lock")));
+    } finally {
+        process.chdir(cwd);
+        if (existsSync(worktreePath)) git(repoRoot, "worktree", "remove", "--force", worktreePath);
+        rmSync(dirname(worktreePath), { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
+});
+
+test("test_resetTask_atBlock_leavesTheSourceLockUntouchedWhenTheWorktreeIsMissing", async () => {
+    // Setup: task 9 is open but its worktree was never created.
+    const repoRoot = makeTempRepoWithCommit();
+    const cwd = process.cwd();
+    const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
+    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    try {
+        const runId = "r1";
+        mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
+        writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{
+            taskNumber: 9,
+            title: "t",
+            difficulty: 4,
+            run: {
+                active: false, worktree: null, leaseRunId: null,
+                history: [{
+                    runId, startedAt: "t", endedAt: "t2", exitType: "tests-red", exitNote: "n",
+                    modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+                }],
+            },
+        }]));
+        writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), "[]");
+
+        writeFileSync(join(repoRoot, ".git", "taskTools-source.lock"), "held");
+
+        // Action + verification: reset at RUN_TASK_TESTS with no worktree rejects, and changes nothing first.
+        process.chdir(repoRoot);
+        await assert.rejects(resetTask(9, "RUN_TASK_TESTS"), /has no worktree at/);
+        assert.ok(existsSync(join(repoRoot, ".git", "taskTools-source.lock")));
+    } finally {
+        process.chdir(cwd);
+        if (existsSync(worktreePath)) git(repoRoot, "worktree", "remove", "--force", worktreePath);
+        rmSync(dirname(worktreePath), { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
+});
+
 test("test_resetTask_atBlock_reroutesThroughARebaseWhenStagingHasMovedSinceTheWorktreeWasCut", async () => {
     // Setup: task 9's worktree is cut from staging, then staging advances before the reset runs.
     const repoRoot = makeTempRepoWithCommit();
@@ -283,10 +360,16 @@ test("test_resetTask_atBlock_regeneratesStepsJsonFromCurrentDiagrams", async () 
         generateSteps(setting.diagramFolder, setting.stepsRoot, stepsConfigPath, setting.allowStubs);
         const staleConfig = JSON.parse(readFileSync(stepsConfigPath, "utf-8"));
         // Drop one box, simulating a diagram change made since this config went stale.
-        for (const entries of Object.values(staleConfig) as { box: string }[][]) {
-            const droppedIndex = entries.findIndex((entry) => entry.box === "MARK_TASK_ACTIVE");
+        for (const entries of Object.values(staleConfig) as ({ box: string }[] | string)[]) {
+            const isStartValue = typeof entries === "string";
+            if (isStartValue) {
+              continue;
+            }
+            const droppedIndex = entries.findIndex((entry) => entry.box === "B_MARK_TASK_ACTIVE");
             if (droppedIndex !== -1) entries.splice(droppedIndex, 1);
         }
+        const staleBoxes = Object.values(staleConfig).flat().map((entry: any) => entry.box);
+        assert.ok(!staleBoxes.includes("B_MARK_TASK_ACTIVE"));
         writeFileSync(stepsConfigPath, JSON.stringify(staleConfig));
 
         git(repoRoot, "branch", "task-9");
@@ -306,7 +389,7 @@ test("test_resetTask_atBlock_regeneratesStepsJsonFromCurrentDiagrams", async () 
         // Verification: the dropped box is back, and the report says so.
         const regeneratedConfig = JSON.parse(readFileSync(stepsConfigPath, "utf-8"));
         const regeneratedBoxes = Object.values(regeneratedConfig).flat().map((entry: any) => entry.box);
-        assert.ok(regeneratedBoxes.includes("MARK_TASK_ACTIVE"));
+        assert.ok(regeneratedBoxes.includes("B_MARK_TASK_ACTIVE"));
         assert.match(said, /task 9 steps\.json and workflow\.js regenerated/);
         assert.ok(existsSync(join(dirname(stepsConfigPath), "workflow.js")));
     } finally {
@@ -366,6 +449,68 @@ test("test_resetTask_atBlock_checksOutTaskBranchInEveryWorktreeSubmodule", async
         await resetTask(9, "RUN_TASK_TESTS");
 
         // Verification: the submodule is back on task-9, at its recorded rewind point.
+        assert.equal(git(join(worktreePath, "vendor"), "branch", "--show-current").trim(), "task-9");
+        assert.equal(git(join(worktreePath, "vendor"), "rev-parse", "HEAD").trim(), rewindOid);
+    } finally {
+        process.chdir(cwd);
+        if (existsSync(worktreePath)) git(repoRoot, "worktree", "remove", "--force", worktreePath);
+        rmSync(dirname(worktreePath), { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+        rmSync(submoduleSource, { recursive: true, force: true });
+    }
+});
+
+test("test_resetTask_atBlock_initializesEmptySubmoduleFoldersBeforeRewinding", async () => {
+    // A worktree re-made by plain `git worktree add` has an empty submodule folder.
+    const repoRoot = makeTempRepoWithCommit();
+    const submoduleSource = makeTempRepoWithCommit();
+    const cwd = process.cwd();
+    const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
+    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    try {
+        git(repoRoot, "-c", "protocol.file.allow=always", "submodule", "add", submoduleSource, "vendor");
+        git(repoRoot, "commit", "-q", "-m", "add vendor submodule");
+
+        const runId = "r1";
+        mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
+        writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{
+            taskNumber: 9,
+            title: "t",
+            difficulty: 4,
+            run: {
+                active: false, worktree: null, leaseRunId: null,
+                history: [{
+                    runId, startedAt: "t", endedAt: "t2", exitType: "tests-red", exitNote: "n",
+                    modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+                }],
+            },
+        }]));
+        writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), "[]");
+
+        git(repoRoot, "branch", "task-9");
+        git(repoRoot, "worktree", "add", worktreePath, "task-9");
+        git(worktreePath, "-c", "protocol.file.allow=always", "submodule", "update", "--init");
+        git(join(worktreePath, "vendor"), "checkout", "-b", "task-9");
+        const rewindOid = git(join(worktreePath, "vendor"), "rev-parse", "HEAD").trim();
+        const rootOid = git(worktreePath, "rev-parse", "HEAD").trim();
+
+        // Re-make the worktree with plain `git worktree add`, leaving the submodule folder empty.
+        git(repoRoot, "worktree", "remove", "--force", worktreePath);
+        git(repoRoot, "worktree", "add", worktreePath, "task-9");
+
+        const packetsFolder = join(repoRoot, ".taskTools", "runs", "0000", "packets");
+        mkdirSync(packetsFolder, { recursive: true });
+        const packetInput = JSON.stringify({ taskNumber: 9, runId, worktree: worktreePath, projectRoot: repoRoot });
+        writeFileSync(join(packetsFolder, "01-RUN_TASK_TESTS-0-1.json"), JSON.stringify({
+            command: `node --no-inspect script.ts '${packetInput}'`,
+            rewindPoints: { "": rootOid, vendor: rewindOid },
+        }));
+
+        // Action: reset task 9 at RUN_TASK_TESTS.
+        process.chdir(repoRoot);
+        await resetTask(9, "RUN_TASK_TESTS");
+
+        // Verification: the reset did not throw, and the submodule is on task-9 at its recorded rewind point.
         assert.equal(git(join(worktreePath, "vendor"), "branch", "--show-current").trim(), "task-9");
         assert.equal(git(join(worktreePath, "vendor"), "rev-parse", "HEAD").trim(), rewindOid);
     } finally {

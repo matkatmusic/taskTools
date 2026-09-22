@@ -83,7 +83,7 @@ function packet(
 ): CommitMergeConflictFixIfNeededPacket {
     return {
         box: "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED", scriptSignal: "continue", taskNumber, runId, projectRoot, worktree,
-        branch: `task-${taskNumber}`, exitType: "", exitNote: "", message: "", additionalData: {}, stoppedOccurrenceId,
+        branch: `task-${taskNumber}`, docsMode: "", planFile: "", exitType: "", exitNote: "", message: "", additionalData: {}, stoppedOccurrenceId,
         stoppedCheckoutPath, conflictedFilePaths: [], conflicted: false, finished: false, failureReason: "",
     };
 }

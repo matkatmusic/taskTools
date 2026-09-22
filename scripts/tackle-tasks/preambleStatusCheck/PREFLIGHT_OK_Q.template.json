@@ -24,6 +24,6 @@
         "planFile": "",
         "exitType": "",
         "exitNote": "",
-        "next": "B_MARK_TASK_ACTIVE"
+        "next": "B_LOCK_STAGING_FOR_CATCH_UP"
     }
 }

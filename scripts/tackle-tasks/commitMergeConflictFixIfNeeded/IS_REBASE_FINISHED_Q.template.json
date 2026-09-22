@@ -27,6 +27,8 @@
         "projectRoot": "/repo",
         "worktree": "/repo/.worktrees/task-1",
         "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
         "exitType": "",
         "exitNote": "",
         "message": "resolved the conflict",

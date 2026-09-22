@@ -23,9 +23,12 @@ export function main(input: string): CommitMergeConflictFixIfNeededPacket & { ne
     }
     return { ...own, next: packet.returnTo };
   }
-  return { ...packet, box: "IS_REBASE_FINISHED_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "pipeline-runFullSuite.mmd::RUN_FULL_SUITE" };
+  return { ...packet, box: "IS_REBASE_FINISHED_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, docsMode: "", planFile: "", next: "pipeline-runFullSuite.mmd::RUN_FULL_SUITE" };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.
-if (realpathSync(process.argv[1]!) === realpathSync(fileURLToPath(import.meta.url)))
+const scriptPath = realpathSync(process.argv[1]!);
+const moduleUrl = fileURLToPath(import.meta.url);
+const modulePath = realpathSync(moduleUrl);
+if (scriptPath === modulePath)
   console.log(JSON.stringify(main(process.argv[2] ?? "")));

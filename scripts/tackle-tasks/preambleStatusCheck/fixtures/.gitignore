@@ -1,1 +1,6 @@
 .taskTools/
+create-example/
+reset-example/
+reset-example-worktree/
+resumed-example/
+resumed-example-worktree/

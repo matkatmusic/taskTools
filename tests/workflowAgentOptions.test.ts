@@ -157,6 +157,6 @@ test("test_workflow_aBareStartingBlockGetsThatBlocksAgentOptions", async () => {
     await runWorkflowScript(script, { task: TASK_NUMBER, tasksFile, startingBlock: "IMPLEMENT_TASK" }, agentResults);
 
     assert.equal(calls[0]!.options.model, "claude-sonnet-5[1m]");
-    assert.equal(calls[0]!.options.effort, "high");
+    assert.equal(calls[0]!.options.effort, "medium");
     assert.match(calls[0]!.prompt, new RegExp(`/taskTools:run-step ${IMPLEMENT_KEY}`));
 });

@@ -82,6 +82,8 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
   const diagramFolderSetting = resolveDiagramFolderSetting(projectRoot, parseFastArgument(argsValue), parseFolderArgument(argsValue));
   const tasksFile = resolveTaskFiles(projectRoot).tasksPath;
   const startingBlock = parseStartingBlockArgument(argsValue);
+  if (startingBlock === "reset")
+    throw new Error(`"reset" must come first: /tackle-tasks reset N [BLOCK]. Got: /tackle-tasks ${argsValue.trim()}`);
   // The harness reloads .claude/agents only on a real user turn, so files written now need a second invocation.
   const agentsDirectory = join(projectRoot, ".claude", "agents");
   const agentsDirectoryMissing = !existsSync(agentsDirectory);
@@ -102,23 +104,30 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
       agentFilesMissing.push(taskNumber);
     }
   }
-  const workflowLines = taskNumbers.map((taskNumber, index) => {
+  const hasStartingBlock = startingBlock !== "";
+  const workflowLines: string[] = [];
+  for (let index = 0; index < taskNumbers.length; index++) {
+    const taskNumber = taskNumbers[index];
     const { workflowFile } = ensureTaskWorkflowPair(tasksFile, taskNumber, diagramFolderSetting);
     const workflowArgs: Record<string, unknown> = {
       task: taskNumber,
       tasksFile,
       // firstPassSchemaCount: retired — the workflow reads AGENT_SCHEMAS by block key now.
     };
-    if (startingBlock !== "")
+    if (hasStartingBlock)
       workflowArgs.startingBlock = startingBlock;
     // Serialized, never interpolated: the arguments may hold quotes, backslashes and newlines.
     const workflowCall = JSON.stringify({
       scriptPath: workflowFile,
       args: workflowArgs,
     });
-    return `WORKFLOW ${index + 1}: ${workflowCall}`;
-  });
-  const executeCalls = taskNumbers.map((_taskNumber, index) => `\`Workflow(WORKFLOW ${index + 1})\``).join(", ");
+    workflowLines.push(`WORKFLOW ${index + 1}: ${workflowCall}`);
+  }
+  const executeCallParts: string[] = [];
+  for (let index = 0; index < taskNumbers.length; index++) {
+    executeCallParts.push(`\`Workflow(WORKFLOW ${index + 1})\``);
+  }
+  const executeCalls = executeCallParts.join(", ");
 
   if (agentFilesMissing.length > 0) {
     return `Agent files for task ${agentFilesMissing.join(", ")} were just written. The harness loads them on your next message.
