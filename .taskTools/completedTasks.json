@@ -10081,5 +10081,48 @@
       "965ca1a8bac620e75263d975982c08c464890536"
     ],
     "closureNote": "buildFailure releases the source-repo lock on the worktree-missing return when the failing block is inside the lock and the project root is a git repo; new test and full suite checked"
+  },
+  {
+    "taskNumber": 246,
+    "version": "2682aa5d784aa56ccb571a8bdbafc91f638ba46b",
+    "title": "[launch 7] One shared module holds the merge-into-staging code and returns a conflict signal instead of throwing",
+    "userDescription": "7. One shared module holds the \"merge the current branch into `staging`\" code. `prepareTasks.ts` uses it. It returns a conflict and does not throw.\n    WHY: the catch-up needs the same code as `resolveOrCreateStagingTip` (`prepareTasks.ts:229-281`). Two copies can drift. A returned conflict lets an agent fix it.\n    HOW: move the body of `resolveOrCreateStagingTip` to a new file in `scripts/shared/`. Comment out the old body. The caller supplies the merge worktree path. `prepareTasks.ts` calls the module and throws on a returned conflict, so its two callers (`createWorktreeForGroup`, `ensureStagingWorktree`) see no change. The existing spawn matrix tests must pass with no edit.\n\nUser ruling (2026-09-18): the new shared module is `scripts/shared/mergeHelpers.ts`. No conflict file list is returned or passed: git shows the conflicts directly, and the agent that fixes them runs the git command itself; the module returns a signal only, e.g. `string | { conflict: true }`. Only the diverged-merge branch of `resolveOrCreateStagingTip` (`prepareTasks.ts:248-280`) moves into the module; the early branches (not-found, exact-match, fast-forward, already-ahead, lines 230-247) stay in `resolveOrCreateStagingTip` (229-281), which calls the module only for the diverged case and throws on a returned conflict, so its own contract (a string tip, or a throw) does not change for any caller. The module takes the merge worktree path from the caller instead of calling `mkdtempSync` itself, so [launch 8]'s catchUpStaging.ts can pass its own `task-N-catchUpMerge` path. Today the conflict throw already sits before the worktree-remove and the staging move, so the merge worktree stays in place on a conflict with no extra code. Real callers: `resolveOrCreateStagingTipEverywhere` (call sites at `prepareTasks.ts:299` and `:301`) and `createWorktreeForGroup` (`:556`) call `resolveOrCreateStagingTip`/`resolveOrCreateStagingTipEverywhere` directly; `ensureStagingWorktree` (`stagingWorktree.ts:44-47`), `buildWorkflowArguments` (`:684`), `runAsCli` (`:781`), and `createWorktreeForGroup`'s fresh-worktree branch (`:585`) go through `resolveOrCreateStagingTipEverywhere`. Tests: `tests/spawnStaging/*.test.ts` (19 files, via `tests/spawnStaging/support.ts:22`) call `createTaskWorktree`, which calls `createWorktreeForGroup`; they must pass with no edit.",
+    "chainGoal": [
+      "The [launch 1] to [launch 22] chain makes a tackle-tasks launch reach the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet, per specs/launch-reaches-planning-alone.md."
+    ],
+    "goal": [
+      "- scripts/shared/mergeHelpers.ts exists and exports the diverged-merge logic that used to live inline in resolveOrCreateStagingTip's diverged branch.",
+      "- resolveOrCreateStagingTip's not-found, exact-match, fast-forward, and already-ahead branches are unchanged; only its diverged branch calls the new module.",
+      "- On a clean merge the new module returns the merged commit as a string; on a conflict it returns `{ conflict: true }`, with no file list.",
+      "- resolveOrCreateStagingTip still throws when the module reports a conflict, so createWorktreeForGroup and ensureStagingWorktree see no behavior change.",
+      "- The new module takes the merge worktree path as a parameter; it never calls `mkdtempSync` itself.",
+      "- `node --test tests/spawnStaging/*.test.ts` (19 files) passes with none of those files edited."
+    ],
+    "notInScope": [
+      "- Building the CATCH_UP_STAGING block and the source-repo-lock wait loop around the catch-up are [launch 9] and [launch 10].",
+      "- scripts/shared/catchUpStaging.ts, the submodule walk, and the `task-N-catchUpMerge` worktree naming are [launch 8].",
+      "- FIX_CATCH_UP_CONFLICTS and its prompt are [launch 11]; this task returns a signal only and builds no prompt."
+    ],
+    "problemSolvedByTask": "The catch-up needs the same merge-into-staging code that resolveOrCreateStagingTip already has. Two copies of that code can drift apart, and a returned conflict signal lets an agent fix the conflict instead of the whole launch throwing and stopping.",
+    "description": "resolveOrCreateStagingTip in scripts/shared/prepareTasks.ts has five branches: not-found, exact-match, fast-forward, already-ahead, and a diverged branch that merges HEAD into staging inside a throwaway worktree and throws on a real conflict. Only that diverged branch moves into a new file, scripts/shared/mergeHelpers.ts; the other four branches, and the STAGING_REF constant, moveStagingBranchTo, and readStagingTip helpers, stay where they are. The new module takes the merge worktree path as a parameter instead of creating its own with mkdtempSync, so a caller added later can pass a path named after its own task. On a clean merge it returns the merged commit as a string; on a conflict it returns a signal object with no file list, since git already shows the conflicted paths and the agent that fixes them runs git itself. resolveOrCreateStagingTip keeps calling the module for its diverged case and throws when the module signals a conflict, so its own contract, a string tip or a throw, is unchanged for every existing caller. The real call sites, createWorktreeForGroup and ensureStagingWorktree, plus resolveOrCreateStagingTipEverywhere, buildWorkflowArguments, and runAsCli which route through them, need no edit. The 19 tests/spawnStaging/*.test.ts files exercise this code indirectly through createTaskWorktree and must keep passing unedited.",
+    "modifiableFiles": [
+      "scripts/shared/prepareTasks.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "createsFiles": [
+      "scripts/shared/mergeHelpers.ts",
+      "tests/mergeHelpers.test.ts"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "New file tests/mergeHelpers.test.ts, built on tests/support/gitFixtures.ts. Test 1, test_mergeHelpers_returnsTheMergedTipOnACleanDivergedMerge: build one git repo where `main` and `staging` each hold one new commit that touches a different file, so they are diverged but merge cleanly. Call the module's merge function with the repo root, the diverged HEAD tip, the staging ref, and a merge worktree path under a temp directory. Expected result: the return value is a 40-character hex commit hash string, and `git -C <repoRoot> show <returned tip>:<the file HEAD added>` matches the content HEAD committed, proving a real merge commit was made. Test 2, test_mergeHelpers_returnsAConflictSignalAndLeavesTheWorktreeInPlace: build one git repo where `main` and `staging` each change the same line of the same file, so the merge conflicts. Call the module the same way. Expected result: the return value deep-equals `{ conflict: true }`; the merge worktree path still exists on disk; `git -C <mergeWorktreePath> status --porcelain` still lists the conflicted file with a `U` prefix, proving no cleanup ran. Existing-suite check: `node --test tests/spawnStaging/diverged.test.ts tests/spawnStaging/diverged-gitlink.test.ts` passes with those two files unedited.",
+    "difficulty": 6,
+    "completionDate": "2026-09-22",
+    "commitHashes": [
+      "5ede02b79562667fb682c32e17e1bc037417a43e"
+    ],
+    "closureNote": "moved the diverged-merge branch of resolveOrCreateStagingTip into scripts/shared/mergeHelpers.ts, which takes the merge worktree path as a parameter and returns a conflict signal instead of throwing; targeted tests (mergeHelpers.test.ts plus all 19 tests/spawnStaging files) pass unedited"
   }
 ]
