@@ -342,34 +342,6 @@
     "difficulty": 4
   },
   {
-    "taskNumber": 242,
-    "version": "f66b50257e291e3f00fcaf93d009b72cfca72743",
-    "title": "[launch 3] All steps of specs/awaiting-testing-folder.md are done",
-    "userDescription": "3. All steps of `specs/awaiting-testing-folder.md` are done.\n   WHY: `CREATE_WORKTREE`, `RESET_WORKTREE`, and the merge tool still use the shared `awaitingTesting` folder after the catch-up. That folder must not throw.\n\nUser ruling (2026-09-18): READY with a check-only goal: every entry made from `specs/awaiting-testing-folder.md` is in completedTasks.json. blockedBy the [folder 9] entry.",
-    "chainGoal": [
-      "A tackle-tasks launch reaches the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet. The chain is [launch 1] to [launch 22] from specs/launch-reaches-planning-alone.md."
-    ],
-    "goal": [
-      "- `jq '[.[] | select(.title | startswith(\"[folder \"))] | length' .taskTools/completedTasks.json` in the mermaid worktree returns `9`, with the command run and its output pasted.",
-      "- `jq -r '.[] | select(.title | startswith(\"[folder \")) | .title' .taskTools/completedTasks.json` lists exactly `[folder 1]` through `[folder 9]`, one each and none missing, with the command run and its output pasted."
-    ],
-    "notInScope": [
-      "- Implementing any of [folder 1] through [folder 9]: each is its own chain entry, not this task's job.",
-      "- Checking `specs/diagrams-in-mermaid-viewer-format.md`'s items: that is [launch 2]."
-    ],
-    "problemSolvedByTask": "Check-only item: the check proves the [folder] chain, which keeps CREATE_WORKTREE, RESET_WORKTREE, and the merge tool from throwing against the shared awaitingTesting folder after the catch-up, is fully archived to completedTasks.json before the [launch] chain's own catch-up work (which reuses that same folder) builds on it.",
-    "description": "This is a check-only task with no code change, following the user ruling that this item's goal is a completedTasks.json count and name check rather than a re-derivation of each folder step's WHY/HOW. It confirms every entry from [folder 1] through [folder 9], made from specs/awaiting-testing-folder.md, is archived in .taskTools/completedTasks.json in the mermaid worktree, both by count (9) and by name (no gap, no duplicate).",
-    "modifiableFiles": [],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "schemaVersion": "1.0.1",
-    "hasTests": false,
-    "tests": "",
-    "difficulty": 1,
-    "blockedBy": []
-  },
-  {
     "taskNumber": 243,
     "version": "5fe173795e6a4626e94cfc4ec75855ee4b241a9c",
     "title": "[launch 4] The generator reads a diagrams.json file in each diagram folder",
@@ -406,13 +378,7 @@
     "schemaVersion": "1.0.1",
     "hasTests": true,
     "tests": "test_getDiagramFileNames_readsDiagramsJsonInsteadOfScanningTheFolder: in a temp folder, write diagrams.json as the array [\"one.mmd\", \"two.mmd\"], write one.mmd and two.mmd, and also write a third file three.mmd that is NOT listed in diagrams.json. Expect getDiagramFileNames(folder) to return exactly [\"one.mmd\", \"two.mmd\"] (three.mmd excluded), proving it reads the array and not the directory listing.\ntest_getDiagramFileNames_throwsWhenADiagramsJsonPathDoesNotExist: in a temp folder, write diagrams.json as [\"missing.mmd\"] and do not create missing.mmd. Expect getDiagramFileNames(folder) to throw.\ntest_getDiagramFileNames_returnsBareBasenamesForASharedPath: in a temp folder pair <root>/a/ and <root>/shared/, write <root>/shared/shared.mmd, and write <root>/a/diagrams.json as [\"../shared/shared.mmd\"]. Expect getDiagramFileNames(\"<root>/a\") to return exactly [\"shared.mmd\"], not \"../shared/shared.mmd\".\ntest_generateSteps_twoDiagramFoldersShareOneFileAndBothGetItsBlocks: in a temp folder, write <root>/shared/shared.mmd as \"flowchart TD\\n    A --> B\\n\", write <root>/folderA/diagrams.json and <root>/folderB/diagrams.json each as [\"../shared/shared.mmd\"], then call generateSteps(join(root,\"folderA\"), stepsRootA, configPathA) and generateSteps(join(root,\"folderB\"), stepsRootB, configPathB) separately. Expect both returned configs to have the single top-level key \"shared.mmd\" (not \"../shared/shared.mmd\"), and config[\"shared.mmd\"].map(entry => entry.box) to equal [\"A\", \"B\"] in both runs.\nUpdate tests/generateSteps.test.ts's generateFrom(diagrams) helper to also writeFileSync a diagrams.json in the diagram folder, containing JSON.stringify(Object.keys(diagrams).filter(name => name.endsWith(\".mmd\")).sort()), so every existing test that goes through generateFrom keeps passing unmodified.\nAdd a diagrams.json (listing that test's own .mmd file names) next to every diagram folder that tests/generateSteps.test.ts and scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts build by hand instead of through generateFrom, so none of those existing tests newly throw once the readdirSync scan is commented out.",
-    "difficulty": 6,
-    "blockedBy": [
-      {
-        "taskNumber": 242,
-        "reason": "chain order: [launch 3] comes before [launch 4]"
-      }
-    ]
+    "difficulty": 6
   },
   {
     "taskNumber": 244,
