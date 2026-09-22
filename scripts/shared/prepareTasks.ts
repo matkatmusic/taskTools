@@ -215,7 +215,7 @@ export function readStagingTip(repoRoot: string): string | null {
 }
 
 // Moves local "staging" to target; if a worktree has it checked out, fast-forward there instead.
-function moveStagingBranchTo(repoRoot: string, target: string): void {
+export function moveStagingBranchTo(repoRoot: string, target: string): void {
     const moved = spawnSync("git", ["-C", repoRoot, "branch", "-f", "staging", target], { encoding: "utf8" });
     if (moved.status !== 0) {
         const stagingCheckout = moved.stderr.match(/used by worktree at '([^']+)'/)?.[1];
