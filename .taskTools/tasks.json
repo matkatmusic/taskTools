@@ -342,45 +342,6 @@
     "difficulty": 4
   },
   {
-    "taskNumber": 249,
-    "version": "6da561321f794f69adf562df443817a560773026",
-    "title": "[launch 10] The CATCH_UP_STAGING block does the catch-up while the source-repo lock is held",
-    "userDescription": "10. The `CATCH_UP_STAGING` block does the catch-up while the source-repo lock is held.\n    WHY: this is user note 1. It removes the throw when `staging` and the user's branch have moved apart.\n    HOW: fill in the stub. It calls `catchUpStaging.ts`. YES (clean): release the lock, go to `MARK_TASK_ACTIVE`. NO (conflict): keep the lock, and put the repository, the worktree path, and the conflicted files in the payload. `MARK_TASK_ACTIVE.template.json` has `input.box` set to `IS_TASK_ACTIVE_Q` today. Set it to the block the diagram draws before it.\n\nUser ruling (2026-09-18): follows the user ruling on [launch 7]: the NO (conflict) payload carries the repository and the worktree path only. Drop \"the conflicted files\" from the payload; no file list exists to pass.",
-    "chainGoal": [
-      "A tackle-tasks launch reaches the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet. The chain is [launch 1] to [launch 22] from specs/launch-reaches-planning-alone.md."
-    ],
-    "goal": [
-      "- `CATCH_UP_STAGING.ts` no longer throws its generator placeholder; it calls the shared catch-up module and branches on the result.",
-      "- On a clean catch-up, the source-repo lock is released and `next` is `B_MARK_TASK_ACTIVE`.",
-      "- On a conflict, the source-repo lock stays held, `next` is `B_FIX_CATCH_UP_CONFLICTS`, and the payload carries `repository` and `worktreePath` only, never a file list.",
-      "- `MARK_TASK_ACTIVE.template.json`'s `input.box` reads `Q_CATCH_UP_STAGING`, not the stale `IS_TASK_ACTIVE_Q`.",
-      "- `node --test scripts/tackle-tasks/preambleStatusCheck/CATCH_UP_STAGING.test.ts` passes."
-    ],
-    "notInScope": [
-      "- Building `scripts/shared/catchUpStaging.ts` and the module it calls is [launch 8] and [launch 7]; this task only calls the result.",
-      "- Filling in `FIX_CATCH_UP_CONFLICTS` and `COMMIT_CATCH_UP_MERGE` is [launch 11] and [launch 12].",
-      "- The wait-for-lock loop that runs before this block is [launch 9]."
-    ],
-    "problemSolvedByTask": "this is user note 1: it removes the throw when `staging` and the user's branch have moved apart, so a diverged or behind `staging` no longer stops a launch before it reaches planning.",
-    "description": "CATCH_UP_STAGING.ts is a generator-written stub in scripts/tackle-tasks/preambleStatusCheck/ that this task fills in; it calls the catch-up module [launch 7]/[launch 8] add at scripts/shared/catchUpStaging.ts, which walks every repository deepest submodule first and either moves `staging` forward, merges the current branch into `staging` in a `task-N-catchUpMerge` worktree, or reports a conflict for one repository at a time, with no conflict file list anywhere per the [launch 7] ruling. On a clean result this block calls releaseSourceRepoLock (scripts/tackle-tasks/shared/sourceRepoLock.ts) and routes to `B_MARK_TASK_ACTIVE`; on a conflict it keeps the lock and routes to `B_FIX_CATCH_UP_CONFLICTS`, writing only `repository` (the repo or submodule root the conflict happened in) and `worktreePath` (the `task-N-catchUpMerge` checkout) into the packet, per the [launch 10] ruling. Those two fields are new, required additions to preambleStatusCheck/_packet.ts's shared EntryPacket type, defaulted to \"\" in PREAMBLE_STATUS_CHECK.ts the same way [launch 9] adds its lockWaitStartedAt field. MARK_TASK_ACTIVE.template.json's `input.box` is corrected from the stale `IS_TASK_ACTIVE_Q` to `Q_CATCH_UP_STAGING`, the block plans/preamble-revised.mmd actually draws immediately before it on the YES branch; MARK_TASK_ACTIVE.ts itself needs no code change, since it spreads `...packet` rather than checking `box` by name. The exact exported name and per-repository return shape of scripts/shared/catchUpStaging.ts could not be verified in this worktree, since [launch 7] and [launch 8] have not landed yet; this task's tests build real git fixtures (staging behind, staging diverged and clean, staging diverged with a conflict) rather than mocking the module, so they exercise whatever shape that module ends up exporting.",
-    "modifiableFiles": [
-      "scripts/tackle-tasks/preambleStatusCheck/_packet.ts",
-      "scripts/tackle-tasks/preambleStatusCheck/CATCH_UP_STAGING.ts",
-      "scripts/tackle-tasks/preambleStatusCheck/CATCH_UP_STAGING.template.json",
-      "scripts/tackle-tasks/preambleStatusCheck/MARK_TASK_ACTIVE.template.json"
-    ],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "createsFiles": [
-      "scripts/tackle-tasks/preambleStatusCheck/CATCH_UP_STAGING.test.ts"
-    ],
-    "schemaVersion": "1.0.1",
-    "hasTests": true,
-    "tests": "scripts/tackle-tasks/preambleStatusCheck/CATCH_UP_STAGING.test.ts, against real git fixtures built with execFileSync the way LOCK_SOURCE_REPO.test.ts and fixConflicts/FIX_CONFLICTS.test.ts build theirs (mkdtempSync, git init, a seed commit on both `main` and `staging`): test_catchUpStaging_movesStagingForwardWhenBehind -- fixture: `staging` and the current branch share the same tip, then one new commit is added to the current branch only, so `staging` is a strict ancestor; call main with the source-repo lock already held by this run's owner; expected result.next === \"B_MARK_TASK_ACTIVE\", the source-repo lock file is gone afterward, and `git rev-parse staging` in the repo now equals the current branch's tip. test_catchUpStaging_mergesCleanlyWhenDiverged -- fixture: `staging` and the current branch each hold one new, non-conflicting commit (different files) since their common ancestor; expected result.next === \"B_MARK_TASK_ACTIVE\", the lock is released, `git rev-parse staging` is a merge commit whose parents are the pre-catch-up `staging` tip and the current branch tip, and no directory named `task-<taskNumber>-catchUpMerge` remains under the repository. test_catchUpStaging_keepsTheLockAndRoutesToFixOnConflict -- fixture: `staging` and the current branch both edit the same line of the same file since their common ancestor; expected result.next === \"B_FIX_CATCH_UP_CONFLICTS\", result.repository equals the repository root path, result.worktreePath equals the `task-<taskNumber>-catchUpMerge` worktree path, that worktree still exists on disk with the file in a conflicted git status, and the source-repo lock file is still present and still owned by this run's `buildLockOwner(runId, taskNumber)`.",
-    "difficulty": 6
-  },
-  {
     "taskNumber": 250,
     "version": "ebef15b08d39487a8036c1d36b808f51275095cb",
     "title": "[launch 11] The FIX_CATCH_UP_CONFLICTS block returns a prompt for a subagent to fix the conflicted files",
@@ -414,13 +375,7 @@
     "schemaVersion": "1.0.1",
     "hasTests": true,
     "tests": "scripts/tackle-tasks/preambleStatusCheck/FIX_CATCH_UP_CONFLICTS.test.ts, built the way scripts/tackle-tasks/fixConflicts/FIX_CONFLICTS.test.ts is (a `makeSourceRepo()` helper that inits a repo on `main` with one empty commit, and a `makeConflictedRepo(fileName)` helper that leaves a real stopped merge with an unmerged path): test_fixCatchUpConflicts_printsAPromptNamingTheConflictedPathFromTheWorktree -- setup: projectRoot = makeSourceRepo(), worktreePath = makeConflictedRepo(\"conflicted.ts\"), acquireSourceRepoLock(projectRoot, buildLockOwner(\"run-1\", 1)) already acquired; input packet has taskNumber:1, runId:\"run-1\", projectRoot, worktreePath, repository: projectRoot; expected output.box === \"B_FIX_CATCH_UP_CONFLICTS\", output.scriptSignal === \"prompt\", and the file at `<worktreePath>/plans/FIX_CATCH_UP_CONFLICTS.prompt.md` exists and its contents include `<worktreePath>/conflicted.ts`. test_fixCatchUpConflicts_runsTwiceWithTheSameInput -- same setup; call main twice with the same input; expected the second call's output deepEquals the first, and the prompt file's contents are unchanged between the two calls. test_fixCatchUpConflicts_throwsWhenTheWorktreeHasNothingUnmerged -- setup: worktreePath is a freshly-inited repo with no conflict; expected main(...) throws matching /no unmerged paths/. test_fixCatchUpConflicts_throwsWhenTheSourceLockIsNotHeldByThisRun -- setup: no lock acquired at all; expected main(...) throws matching /source repository lock/.",
-    "difficulty": 3,
-    "blockedBy": [
-      {
-        "taskNumber": 249,
-        "reason": "chain order: [launch 10] comes before [launch 11]"
-      }
-    ]
+    "difficulty": 3
   },
   {
     "taskNumber": 251,
