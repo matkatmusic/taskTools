@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { generateSteps, getBoxesInDiagram, getEdgesInDiagram, resolveDiagramFolderSetting } from "../scripts/tackle-tasks/generateSteps.ts";
+import { generateSteps, getBoxesInDiagram, getDiagramFileNames, getEdgesInDiagram, resolveDiagramFolderSetting } from "../scripts/tackle-tasks/generateSteps.ts";
 import type { StepConfigEntry } from "../scripts/tackle-tasks/generateSteps.ts";
 import { skillBody } from "../scripts/tackle-tasks/shared/SkillBodyEmitter.ts";
 
@@ -29,6 +29,7 @@ function generateFrom(diagrams: Record<string, string>) {
     copyFileSync(join(PROJECT_ROOT, "scripts/shared/contracts.ts"), join(folder, "shared", "contracts.ts"));
     copyFileSync(join(PROJECT_ROOT, "scripts/shared/templateShape.ts"), join(folder, "shared", "templateShape.ts"));
     for (const [name, contents] of Object.entries(diagrams)) writeFileSync(join(diagramFolder, name), contents);
+    writeFileSync(join(diagramFolder, "diagrams.json"), JSON.stringify(Object.keys(diagrams).filter(name => name.endsWith(".mmd")).sort()));
     const run = () => narrow(generateSteps(diagramFolder, stepsRoot, configPath, true, true));
     return { config: run(), run, diagramFolder, stepsRoot, configPath, readConfig: () => JSON.parse(readFileSync(configPath, "utf8")) };
 }
@@ -370,6 +371,7 @@ test("test_resolveDiagramFolderSetting_readsACustomDiagramFolderFromSettings", (
     const diagramFolder = join(fixtureRoot, "diagrams");
     mkdirSync(diagramFolder, { recursive: true });
     writeFileSync(join(diagramFolder, "one.mmd"), "flowchart TD\n    A --> B\n");
+    writeFileSync(join(diagramFolder, "diagrams.json"), JSON.stringify(["one.mmd"]));
     writeFileSync(join(fixtureRoot, ".taskTools/settings.json"), JSON.stringify({ diagramFolder }));
     const setting = resolveDiagramFolderSetting(fixtureRoot, false, "");
     assert.deepEqual(setting, { diagramFolder, stepsRoot: diagramFolder, allowStubs: false });
@@ -398,6 +400,7 @@ test("test_resolveDiagramFolderSetting_folderWordWinsOverSettingsJson", () => {
     mkdirSync(join(fixtureRoot, "b"), { recursive: true });
     writeFileSync(join(fixtureRoot, "a", "one.mmd"), "flowchart TD\n    A[\"A\"]\n");
     writeFileSync(join(fixtureRoot, "b", "one.mmd"), "flowchart TD\n    A[\"A\"]\n");
+    writeFileSync(join(fixtureRoot, "b", "diagrams.json"), JSON.stringify(["one.mmd"]));
     mkdirSync(join(fixtureRoot, ".taskTools"), { recursive: true });
     writeFileSync(join(fixtureRoot, ".taskTools", "settings.json"), JSON.stringify({ diagramFolder: "a" }));
     const setting = resolveDiagramFolderSetting(fixtureRoot, false, "b");
@@ -408,6 +411,7 @@ test("test_resolveDiagramFolderSetting_folderWordWithNoSettingsJson", () => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "resolve-folder-"));
     mkdirSync(join(fixtureRoot, "b"), { recursive: true });
     writeFileSync(join(fixtureRoot, "b", "one.mmd"), "flowchart TD\n    A[\"A\"]\n");
+    writeFileSync(join(fixtureRoot, "b", "diagrams.json"), JSON.stringify(["one.mmd"]));
     const setting = resolveDiagramFolderSetting(fixtureRoot, false, "b");
     assert.equal(setting.diagramFolder, join(fixtureRoot, "b"));
 });
@@ -423,6 +427,7 @@ test("test_resolveDiagramFolderSetting_throwsForAMissingFolder", () => {
 test("test_resolveDiagramFolderSetting_throwsForAnEmptyFolder", () => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "resolve-folder-"));
     mkdirSync(join(fixtureRoot, "empty"), { recursive: true });
+    writeFileSync(join(fixtureRoot, "empty", "diagrams.json"), JSON.stringify([]));
     assert.throws(
         () => resolveDiagramFolderSetting(fixtureRoot, false, "empty"),
         (error: Error) => error.message.includes(join(fixtureRoot, "empty")) && error.message.includes("does not exist or holds no .mmd files"),
@@ -473,6 +478,7 @@ test("test_generateSteps_throwsOnAMissingScriptWhenStubsAreNotAllowed", () => {
     const configPath = join(folder, "steps.json");
     mkdirSync(diagramFolder, { recursive: true });
     writeFileSync(join(diagramFolder, "one.mmd"), "flowchart TD\n    A --> B\n");
+    writeFileSync(join(diagramFolder, "diagrams.json"), JSON.stringify(["one.mmd"]));
     assert.throws(() => generateSteps(diagramFolder, stepsRoot, configPath, false), /A\.ts is missing/);
 });
 
@@ -482,6 +488,7 @@ test("test_generateSteps_usesAuthoredScriptsInACustomFolderWithoutThrowing", () 
     const configPath = join(folder, "steps.json");
     mkdirSync(diagramFolder, { recursive: true });
     writeFileSync(join(diagramFolder, "one.mmd"), "flowchart TD\n    A --> B\n");
+    writeFileSync(join(diagramFolder, "diagrams.json"), JSON.stringify(["one.mmd"]));
     mkdirSync(join(diagramFolder, "one"), { recursive: true });
     writeFileSync(join(diagramFolder, "one/A.ts"), "// authored\n");
     writeFileSync(join(diagramFolder, "one/A.template.json"), `{"input":{},"output":{"box":"A"}}`);
@@ -502,6 +509,7 @@ test("test_tackleTasks_walksACustomDiagramFoldersBlocksAndNoneOfTheDefaultPipeli
         join(diagramFolder, "pipeline-preambleStatusCheck.mmd"),
         "flowchart TD\n    Q_PREAMBLE_STATUS_CHECK --> SECOND_BOX\n",
     );
+    writeFileSync(join(diagramFolder, "diagrams.json"), JSON.stringify(["pipeline-preambleStatusCheck.mmd"]));
 
     const preambleFolder = join(diagramFolder, "preambleStatusCheck");
     mkdirSync(preambleFolder, { recursive: true });
@@ -804,4 +812,64 @@ test("test_generateSteps_throwsNamingZeroCandidatesWhenEveryBoxHasAnArrowIntoIt"
             "one.mmd": "flowchart TD\n    A --> B\n    B --> A\n",
         });
     }, /expected exactly one start block, found 0: ?$/);
+});
+
+test("test_getDiagramFileNames_readsDiagramsJsonInsteadOfScanningTheFolder", () => {
+    // Setup: a folder with three diagram files, but diagrams.json names only two of them.
+    const diagramFolder = mkdtempSync(join(tmpdir(), "diagram-file-names-"));
+    writeFileSync(join(diagramFolder, "diagrams.json"), JSON.stringify(["one.mmd", "two.mmd"]));
+    writeFileSync(join(diagramFolder, "one.mmd"), "flowchart TD\n    A --> B\n");
+    writeFileSync(join(diagramFolder, "two.mmd"), "flowchart TD\n    C --> D\n");
+    writeFileSync(join(diagramFolder, "three.mmd"), "flowchart TD\n    E --> F\n");
+
+    // Test action: read the folder's diagram file names.
+    const diagramFileNames = getDiagramFileNames(diagramFolder);
+
+    // Verification: only the listed files come back, so the folder listing is not read.
+    assert.deepEqual(diagramFileNames, ["one.mmd", "two.mmd"]);
+});
+
+test("test_getDiagramFileNames_throwsWhenADiagramsJsonPathDoesNotExist", () => {
+    // Setup: diagrams.json names a file that is not on disk.
+    const diagramFolder = mkdtempSync(join(tmpdir(), "diagram-file-names-missing-"));
+    writeFileSync(join(diagramFolder, "diagrams.json"), JSON.stringify(["missing.mmd"]));
+
+    // Test action and verification: the read throws and names the missing path.
+    assert.throws(() => getDiagramFileNames(diagramFolder), (error: Error) => error.message.includes(join(diagramFolder, "missing.mmd")));
+});
+
+test("test_getDiagramFileNames_returnsBareBasenamesForASharedPath", () => {
+    // Setup: folder a names a file that lives in a sibling shared folder.
+    const root = mkdtempSync(join(tmpdir(), "diagram-file-names-shared-"));
+    mkdirSync(join(root, "a"));
+    mkdirSync(join(root, "shared"));
+    writeFileSync(join(root, "shared", "shared.mmd"), "flowchart TD\n    A --> B\n");
+    writeFileSync(join(root, "a", "diagrams.json"), JSON.stringify(["../shared/shared.mmd"]));
+
+    // Test action: read folder a's diagram file names.
+    const diagramFileNames = getDiagramFileNames(join(root, "a"));
+
+    // Verification: the name is the bare basename, not the relative path from diagrams.json.
+    assert.deepEqual(diagramFileNames, ["shared.mmd"]);
+});
+
+test("test_generateSteps_twoDiagramFoldersShareOneFileAndBothGetItsBlocks", () => {
+    // Setup: one shared diagram file, and two folders whose diagrams.json both name it.
+    const root = mkdtempSync(join(tmpdir(), "generate-steps-shared-"));
+    mkdirSync(join(root, "shared"));
+    mkdirSync(join(root, "folderA"));
+    mkdirSync(join(root, "folderB"));
+    writeFileSync(join(root, "shared", "shared.mmd"), "flowchart TD\n    A --> B\n");
+    writeFileSync(join(root, "folderA", "diagrams.json"), JSON.stringify(["../shared/shared.mmd"]));
+    writeFileSync(join(root, "folderB", "diagrams.json"), JSON.stringify(["../shared/shared.mmd"]));
+
+    // Test action: generate each folder on its own.
+    const configA = narrow(generateSteps(join(root, "folderA"), join(root, "stepsA"), join(root, "stepsA.json")));
+    const configB = narrow(generateSteps(join(root, "folderB"), join(root, "stepsB"), join(root, "stepsB.json")));
+
+    // Verification: both configs key the shared file by its bare name, and both get its blocks.
+    assert.deepEqual(Object.keys(configA).sort(), ["shared.mmd", "start"]);
+    assert.deepEqual(Object.keys(configB).sort(), ["shared.mmd", "start"]);
+    assert.deepEqual(configA["shared.mmd"]!.map(entry => entry.box), ["A", "B"]);
+    assert.deepEqual(configB["shared.mmd"]!.map(entry => entry.box), ["A", "B"]);
 });

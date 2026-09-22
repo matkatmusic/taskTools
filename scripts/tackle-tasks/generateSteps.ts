@@ -457,15 +457,27 @@ function getTakesSourceLockFromPreviousConfig(configPath: string): Record<string
   return takesSourceLockByStepKey;
 }
 
-// A leading underscore marks a spec diagram: it is drawn and served, but never generated from.
-function getDiagramFileNames(diagramFolder: string): string[] {
+// diagrams.json lists the folder's diagram paths, relative to the folder; a missing path throws.
+export function getDiagramFileNames(diagramFolder: string): string[] {
+  // commented out (task 243): diagrams.json names the folder's diagram files now
+  // const diagramFileNames: string[] = [];
+  // for (const name of readdirSync(diagramFolder)) {
+  //   const isDiagramFile = name.endsWith(".mmd");
+  //   const isSpecDiagram = name.startsWith("_");
+  //   if (isDiagramFile && !isSpecDiagram) {
+  //     diagramFileNames.push(name);
+  //   }
+  // }
+  // return diagramFileNames.sort();
+  const declaredPaths = JSON.parse(readFileSync(join(diagramFolder, "diagrams.json"), "utf8")) as string[];
   const diagramFileNames: string[] = [];
-  for (const name of readdirSync(diagramFolder)) {
-    const isDiagramFile = name.endsWith(".mmd");
-    const isSpecDiagram = name.startsWith("_");
-    if (isDiagramFile && !isSpecDiagram) {
-      diagramFileNames.push(name);
+  for (const declaredPath of declaredPaths) {
+    const diagramPath = join(diagramFolder, declaredPath);
+    const diagramExists = existsSync(diagramPath);
+    if (!diagramExists) {
+      throw new Error(`${diagramPath} is listed in ${join(diagramFolder, "diagrams.json")} but does not exist`);
     }
+    diagramFileNames.push(basename(declaredPath));
   }
   return diagramFileNames.sort();
 }
@@ -501,8 +513,15 @@ type ParsedDiagram = DiagramEdges & { promptBoxes: string[]; blockSignpostTarget
 // Every diagram's boxes, edges, and prompt-marked boxes, parsed once up front.
 function parseDiagrams(diagramFolder: string): Map<string, ParsedDiagram> {
   const parsedByDiagramFile = new Map<string, ParsedDiagram>();
+  const declaredPaths = JSON.parse(readFileSync(join(diagramFolder, "diagrams.json"), "utf8")) as string[];
+  const declaredPathByDiagramFile = new Map<string, string>();
+  for (const declaredPath of declaredPaths) {
+    declaredPathByDiagramFile.set(basename(declaredPath), declaredPath);
+  }
   for (const diagramFile of getDiagramFileNames(diagramFolder)) {
-    const diagram = readFileSync(join(diagramFolder, diagramFile), "utf8");
+    // commented out (task 243): a diagrams.json entry can live outside diagramFolder
+    // const diagram = readFileSync(join(diagramFolder, diagramFile), "utf8");
+    const diagram = readFileSync(join(diagramFolder, declaredPathByDiagramFile.get(diagramFile)!), "utf8");
     const { boxes, next } = getEdgesInDiagram(diagram);
     parsedByDiagramFile.set(diagramFile, {
       boxes,

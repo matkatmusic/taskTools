@@ -105,6 +105,7 @@ test("test_skillBody_twoProjectsWithDifferentDiagramsNeverShareAStepsJson", () =
     // Custom diagram folders must still supply PREAMBLE_STATUS_CHECK and SECOND_BOX, like generateSteps.test.ts's fixture.
     mkdirSync(customDiagramFolder, { recursive: true });
     writeFileSync(join(customDiagramFolder, "pipeline-preambleStatusCheck.mmd"), "flowchart TD\n    PREAMBLE_STATUS_CHECK --> SECOND_BOX\n");
+    writeFileSync(join(customDiagramFolder, "diagrams.json"), JSON.stringify(["pipeline-preambleStatusCheck.mmd"]));
     const preambleFolder = join(customDiagramFolder, "pipeline-preambleStatusCheck");
     mkdirSync(preambleFolder, { recursive: true });
     const preambleOutput = { box: "PREAMBLE_STATUS_CHECK", scriptSignal: "continue", note: "", input: "" };
@@ -134,6 +135,7 @@ test("test_skillBody_folderWordPicksACustomDiagramFolderOwningItsOwnSteps", () =
     const customDiagramFolder = join(root, "b");
     mkdirSync(customDiagramFolder, { recursive: true });
     writeFileSync(join(customDiagramFolder, "one.mmd"), "flowchart TD\n    CUSTOM_BLOCK[\"Custom Block\"]\n");
+    writeFileSync(join(customDiagramFolder, "diagrams.json"), JSON.stringify(["one.mmd"]));
     const blockFolder = join(customDiagramFolder, "one");
     mkdirSync(blockFolder, { recursive: true });
     const blockOutput = { box: "CUSTOM_BLOCK", scriptSignal: "stop", note: "MARKER", input: "" };

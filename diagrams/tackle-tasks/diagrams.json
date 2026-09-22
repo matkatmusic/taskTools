@@ -1,0 +1,21 @@
+[
+    "pipeline-areTestsFlagged.mmd",
+    "pipeline-codexReviewsPlan.mmd",
+    "pipeline-codexReviewsTests.mmd",
+    "pipeline-commitImplementationIfNeeded.mmd",
+    "pipeline-commitMergeConflictFixIfNeeded.mmd",
+    "pipeline-failuresExit.mmd",
+    "pipeline-fixConflicts.mmd",
+    "pipeline-fixImplementTaskTests.mmd",
+    "pipeline-fixTheCodebaseForSuite.mmd",
+    "pipeline-implementTask.mmd",
+    "pipeline-lockSourceRepo.mmd",
+    "pipeline-mergeSucceededExit.mmd",
+    "pipeline-planTheTask.mmd",
+    "pipeline-preambleStatusCheck.mmd",
+    "pipeline-rebase.mmd",
+    "pipeline-reportOnlyExit.mmd",
+    "pipeline-runFullSuite.mmd",
+    "pipeline-whatDidThePlannerReturn.mmd",
+    "pipeline-whatIsReviewVerdict.mmd"
+]
