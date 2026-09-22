@@ -9161,5 +9161,651 @@
       "86e1e97"
     ],
     "closureNote": "completed by subagent"
+  },
+  {
+    "taskNumber": 228,
+    "version": "2ab710d36925cd8180814c98d2459d1042260e55",
+    "title": "[mermaid 13] Full suite passes",
+    "userDescription": "13. Full suite passes via `npm run test:baseline`.",
+    "chainGoal": [
+      "The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone. The chain is [mermaid 1] to [mermaid 15] from specs/diagrams-in-mermaid-viewer-format.md."
+    ],
+    "goal": [
+      "- `npm run test:baseline` exits 0 with no failures outside `.taskTools/knownFailingTests.json`, confirming [mermaid 1] through [mermaid 12] leave no regression, with the command run and its output pasted."
+    ],
+    "notInScope": [
+      "- Any code change: this is a check-only task; a failure here is fixed by returning to whichever of [mermaid 1] through [mermaid 12] caused it, not by editing here.",
+      "- Rewriting the known-failing-tests baseline: only `/task-tests` may do that, and only when the user asks."
+    ],
+    "problemSolvedByTask": "Check-only item: the check proves the whole chain from [mermaid 1] through [mermaid 12] lands with no test regression before [mermaid 14] proves the splice by hand.",
+    "description": "This is a check-only task with no code change: run npm run test:baseline and paste its output. A pass confirms every prior item in the chain, mermaid 1 through mermaid 12, leaves the suite in the same state as the committed .taskTools/knownFailingTests.json baseline. A failure not already in that baseline means a prior chain item introduced a regression, fixed by returning to that item, never by editing here.",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 1,
+    "completionDate": "2026-09-19",
+    "commitHashes": [
+      "3d4f67c"
+    ],
+    "closureNote": "completed by subagent"
+  },
+  {
+    "taskNumber": 229,
+    "version": "b9d015b392354380f434b98bf4bb9fdabe3cb77c",
+    "title": "[mermaid 14] Prove the splice",
+    "userDescription": "14. WHAT: Prove the splice.\n   WHY: this is the goal, shown once by hand.\n   HOW: One new block is added to the preamble diagram by drawing it only; the generator is run; the `file:` line, the stub, and the entry appear; the pipeline starts a task and reaches the block, and the block throws \"not implemented\".\n\nUser ruling (2026-09-18): files is `diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd` (the same file [mermaid 11] replaces). createsFiles is the generator-written stub `.ts` and its `.template.json` for one demo block, e.g. `B_PROVE_SPLICE_DEMO` (file name per [mermaid 5]'s camelCase rule, path repo-root-relative per [mermaid 4]). Run `npm run steps` (`node scripts/tackle-tasks/generateSteps.ts && node scripts/tackle-tasks/generateWorkflow.ts`); only the generateSteps half matters here, since `/run-step` reads `scripts/tackle-tasks/diagram-steps.json` directly. Then reach the block via `/run-step` on any open task. hasTests is false: this is a one-time proof by hand, not an automated test.",
+    "chainGoal": [
+      "The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone. The chain is [mermaid 1] to [mermaid 15] from specs/diagrams-in-mermaid-viewer-format.md."
+    ],
+    "goal": [
+      "- `diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd` has one new block drawn by hand, with no `file:` line of its own, added on top of what [mermaid 11] replaced it with.",
+      "- After `npm run steps`, the new block's entry in `scripts/tackle-tasks/diagram-steps.json` has a generator-filled `file:`/`script` value, and its stub `.ts` and `.template.json` exist on disk, both written by the generator, not by hand.",
+      "- Running `/run-step` on any open task and reaching the new block prints `block <name> in <diagram> is not implemented`, with the command and its pasted output."
+    ],
+    "notInScope": [
+      "- Wiring the new demo block into the live pipeline route: it exists only to prove the splice, and is left disconnected once proven.",
+      "- Filling in the stub's real logic: per [mermaid 5], a stub always throws until someone implements it; the throw is the proof, not a defect.",
+      "- Running `generateWorkflow.ts`'s half of `npm run steps`: only the `generateSteps.ts` half matters, since `/run-step` reads `scripts/tackle-tasks/diagram-steps.json` directly."
+    ],
+    "problemSolvedByTask": "This is the chain's own stated goal, shown once by hand: proof that a new block can be spliced into the pipeline by an edit to the diagram alone, with no generator or pipeline code touched for that block.",
+    "description": "This is a one-time proof by hand, not an automated test: hasTests is false. One new block, e.g. B_PROVE_SPLICE_DEMO, is drawn into diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd, the same file [mermaid 11] replaces, with no file: line of its own. Running npm run steps regenerates scripts/tackle-tasks/diagram-steps.json: per [mermaid 5], the generator fills in the missing file: line and writes the block's stub .ts and its .template.json. [mermaid 5] decides the stub path (its owner folder and the blockNameAsCamelCase file name) and that logic has not landed in this worktree yet, so the exact path the generator writes into the new file: line cannot be predicted here; it is read back from the regenerated diagram-steps.json entry after running npm run steps, not chosen in advance, and createsFiles is left empty for that reason. Only the generateSteps half of npm run steps matters, since /run-step reads scripts/tackle-tasks/diagram-steps.json directly rather than any output of generateWorkflow.ts. Reaching the new block through /run-step on any open task must throw the stub's standard \"block <name> in <diagram> is not implemented\" message, proving the diagram edit alone drove the splice.",
+    "modifiableFiles": [
+      "diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 2,
+    "completionDate": "2026-09-19",
+    "commitHashes": [
+      "5645f82"
+    ],
+    "closureNote": "completed by subagent"
+  },
+  {
+    "taskNumber": 230,
+    "version": "9f7c41377544195f0d107564361f045d7ea43a8e",
+    "title": "[mermaid 15] Goal: the mermaid-viewer chain holds",
+    "userDescription": "15. Goal: The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone.\n\nUser ruling (2026-09-18): a Goal item checks the literal goal sentence written in its spec item, not \"the items before it hold\". This item's goal is exactly the sentence above, copied verbatim. Each goal line is a by-hand check of one clause of that sentence, with an exact command and exact expected output: the mermaid-viewer-format clause and the generator-parses-them clause (`node scripts/tackle-tasks/generateSteps.ts` exits 0) each get their own command, and the splice clause points at [mermaid 14]'s exact proof steps. Still check-only: no code change, hasTests false, tests \"\".\n\nUser ruling (2026-09-18): in this chain only the preamble diagram moves to the new format ([mermaid 11], in both `diagrams/tackle-tasks` and `diagrams/tackle-tasks-fast`); the other diagrams keep the plain-ID format. The \"diagrams use the mermaid-viewer format\" check looks only at `diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd` and `diagrams/tackle-tasks-fast/pipeline-preambleStatusCheck.mmd`, not at `diagrams/tackle-tasks/*.mmd`.",
+    "chainGoal": [
+      "The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone. The chain is [mermaid 1] to [mermaid 15] from specs/diagrams-in-mermaid-viewer-format.md."
+    ],
+    "goal": [
+      "- The diagrams use the mermaid-viewer format: `rg -n '^\\s*[A-Z][A-Za-z0-9_]*(\\[|\\(|\\{)' diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd diagrams/tackle-tasks-fast/pipeline-preambleStatusCheck.mmd | rg -v '(B_|Q_CHOICE_|Q_)'` finds no plain-ID (unprefixed) box declaration in either preamble diagram; the exact expected output is nothing printed. This chain only migrates the preamble diagram, so the other files under `diagrams/tackle-tasks/` and `diagrams/tackle-tasks-fast/` are not part of this check.",
+      "- The generator parses them: `node scripts/tackle-tasks/generateSteps.ts` exits 0, printing a config summary with no thrown error.",
+      "- A new block can be spliced into the pipeline by an edit to the diagram alone: re-run [mermaid 14]'s exact proof — with its demo block still drawn in `diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd`, run `npm run steps`, confirm the demo block's `file:` line, stub `.ts`, and `diagram-steps.json` entry exist, then run `/run-step` on any open task; the exact expected output is the stub's own message, `block <name> in <diagram> is not implemented`, with the command and its pasted output."
+    ],
+    "notInScope": [
+      "- Any code change: this is a check-only task, like every other \"Goal:\" item in this spec.",
+      "- Removing or cleaning up [mermaid 14]'s demo block: not addressed by this item.",
+      "- Moving the other diagrams to the new format: not part of this chain."
+    ],
+    "problemSolvedByTask": "Check-only item: the check proves the chain's own literal goal sentence — the diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced in by a diagram edit alone — each clause verified by its own by-hand command, not by re-confirming that prior items hold.",
+    "description": "This is a check-only task with no code change, per the user ruling that a Goal item checks the literal goal sentence in its own spec item, not that the items before it hold. The goal sentence is copied verbatim from specs/diagrams-in-mermaid-viewer-format.md item 15: \"The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone.\" Each of its three clauses gets its own by-hand check with an exact command and exact expected output. In this chain only the preamble diagram moves to the new format ([mermaid 11], in both diagrams/tackle-tasks and diagrams/tackle-tasks-fast); the other diagrams keep the plain-ID format. The mermaid-viewer-format clause is checked by grepping only diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd and diagrams/tackle-tasks-fast/pipeline-preambleStatusCheck.mmd for any box declaration that is not prefixed B_, Q_, or Q_CHOICE_; nothing should print. The parses-them clause is checked by running node scripts/tackle-tasks/generateSteps.ts directly and confirming it exits 0. The splice-by-diagram-edit-alone clause is checked by re-running mermaid 14's own proof exactly: the demo block drawn in pipeline-preambleStatusCheck.mmd still gets its file: line, stub, and diagram-steps.json entry from npm run steps, and /run-step still reaches it and throws its stub message.",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 1,
+    "completionDate": "2026-09-19",
+    "commitHashes": [],
+    "closureNote": "completed by subagent: check-only, all three goal clauses verified"
+  },
+  {
+    "taskNumber": 231,
+    "version": "edfd5c51c647b898960b87fe2bca5c4af7ba0281",
+    "title": "[folder 1] Start: confirm the current shared staging-worktree state",
+    "userDescription": "1. Start: the shared checkout folder is `<tmp>/taskTools-wt/<repo>-<hash>/staging` (`scripts/tackle-tasks/shared/stagingWorktree.ts:12`); the guard at `stagingWorktree.ts:31-35` throws when the folder is on the wrong branch and `git status --porcelain` is not empty; the merge tool at `scripts/merge-worktree-tasks/mergeTaskWorktrees.ts:888,895` passes the user's current branch instead of `staging`.",
+    "chainGoal": [
+      "When a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it. The chain is [folder 1] to [folder 9] from specs/awaiting-testing-folder.md."
+    ],
+    "goal": [
+      "- `sed -n '11,13p' scripts/tackle-tasks/shared/stagingWorktree.ts` confirms `stagingWorktreePath` returns `join(resolveTaskWorktreeConventionDirectory(projectRoot), \"staging\")`, with the command run and its output pasted.",
+      "- `sed -n '29,35p' scripts/tackle-tasks/shared/stagingWorktree.ts` confirms the guard throws when the found branch differs from the expected branch and `git status --porcelain` is not empty, with the command run and its output pasted.",
+      "- `sed -n '883,896p' scripts/merge-worktree-tasks/mergeTaskWorktrees.ts` confirms `runMergeCli` passes `parentSource.sourceBranch` to both `ensureStagingWorktree` and `mergeGroupBranchIntoRepo`, not the literal `\"staging\"`, with the command run and its output pasted.",
+      "- `sed -n '68,71p' scripts/shared/repositoryBranches.ts` confirms `collectRepositorySources` sets the parent path's `sourceBranch` to `currentBranchName(repoRoot)`, the branch actually checked out, ignoring the `rootBranch` argument passed in, so `parentSource.sourceBranch` really is the user's current branch, with the command run and its output pasted."
+    ],
+    "notInScope": [
+      "- changing `stagingWorktreePath`'s return value: owned by [folder 2]",
+      "- changing the wrong-branch guard's behavior: owned by [folder 3]",
+      "- changing `runMergeCli` to pass `\"staging\"`: owned by [folder 5]"
+    ],
+    "problemSolvedByTask": "Confirms the current pipeline state before the awaitingTesting rename chain begins: the shared folder is still literally named `staging`, the wrong-branch guard still throws on any non-empty `git status --porcelain`, and the merge tool still points the shared folder at the user's current branch instead of `staging`.",
+    "description": "This is a check-only Start task with no code change. stagingWorktreePath in scripts/tackle-tasks/shared/stagingWorktree.ts joins the convention directory with the literal folder name \"staging\", the same word the branch uses. The wrong-branch guard inside addOrVerifyLinkedWorktree throws whenever the found branch differs from the expected branch and git status --porcelain is not empty, with no distinction between real work and a stale index. runMergeCli in scripts/merge-worktree-tasks/mergeTaskWorktrees.ts passes parentSource.sourceBranch to both ensureStagingWorktree and mergeGroupBranchIntoRepo. collectRepositorySources in scripts/shared/repositoryBranches.ts sets that parent sourceBranch to whatever branch is currently checked out in repoRoot, ignoring the \"staging\" string passed as its rootBranch argument, so the merge tool really does point the shared folder at the user's own branch today. No test or other caller hardcodes the shared folder's basename as a literal path string; every caller reaches it through the stagingWorktreePath function.",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 1,
+    "completionDate": "2026-09-20",
+    "commitHashes": [],
+    "closureNote": "closed manually by user: check-only, no code change"
+  },
+  {
+    "taskNumber": 232,
+    "version": "0846dba4cbc51e17681c1ccd39fe24e0bde8d525",
+    "title": "[folder 2] Rename the shared checkout folder to awaitingTesting",
+    "userDescription": "2. The shared checkout folder is named `awaitingTesting`.\n   WHY: the folder and the branch share the word `staging` today, so people and code mix them up.\n   HOW: comment out the `join(..., \"staging\")` return at `stagingWorktree.ts:12` and return `join(..., \"awaitingTesting\")`. Add one test in `scripts/tackle-tasks/shared/stagingWorktree.test.ts` that checks the basename of `stagingWorktreePath()`. No test hard-codes the folder name as a path part.",
+    "chainGoal": [
+      "When a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it. The chain is [folder 1] to [folder 9] from specs/awaiting-testing-folder.md."
+    ],
+    "goal": [
+      "- `node --test scripts/tackle-tasks/shared/stagingWorktree.test.ts` passes, including a new test that asserts `basename(stagingWorktreePath(repo))` equals the exact string `\"awaitingTesting\"`.",
+      "- `rg -n 'return join\\(.*\"awaitingTesting\"\\)' scripts/tackle-tasks/shared/stagingWorktree.ts` matches the live return line.",
+      "- `rg -n 'return join\\(.*\"staging\"\\)' scripts/tackle-tasks/shared/stagingWorktree.ts` matches nothing live (only inside a `//` comment), confirming the old return is commented out, not deleted.",
+      "- `node --test scripts/tackle-tasks/commitImplementationIfNeeded/COMMIT_IMPLEMENTATION_IF_NEEDED.test.ts` still passes, confirming an existing caller of `stagingWorktreePath` needed no change."
+    ],
+    "notInScope": [
+      "- rebuilding a folder that is on the wrong branch: owned by [folder 3]",
+      "- removing the pre-existing `staging`-named folder that already sits on disk: owned by [folder 4]",
+      "- pointing the merge tool at the `staging` branch: owned by [folder 5]"
+    ],
+    "problemSolvedByTask": "The folder and the branch share the word `staging` today, so people and code mix them up. Renaming the folder to `awaitingTesting` keeps `staging` meaning only the branch.",
+    "description": "stagingWorktreePath in scripts/tackle-tasks/shared/stagingWorktree.ts is the sole place that names the shared checkout folder; it returns join(resolveTaskWorktreeConventionDirectory(projectRoot), \"staging\") today. Every caller (mergeTaskWorktrees.ts, occurrences.ts, resetTask.ts, and their tests) reaches the folder through this function, never through a hardcoded path string, so changing the returned basename here is the only production edit this task needs. The retired \"staging\" return line is commented out, not deleted, per repo convention. The new test in stagingWorktree.test.ts asserts on the basename of the function's return value, not on a hardcoded path segment, so it does not itself become a place that pins the old name.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/shared/stagingWorktree.ts",
+      "scripts/tackle-tasks/shared/stagingWorktree.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "New test in scripts/tackle-tasks/shared/stagingWorktree.test.ts, e.g. test_stagingWorktreePath_usesAwaitingTestingAsTheFolderName: call stagingWorktreePath(repo) using the existing makeTempRepoWithTestScript(\"main\") fixture as repo, take basename() of the returned path, and assert it equals the exact string \"awaitingTesting\". The existing test test_ensureStagingWorktree_addsALinkedWorktreeOnTheSourceBranch already asserts existsSync(path) and git(path, \"branch\", \"--show-current\") without hardcoding the folder name, so it needs no edit and must still pass unmodified.",
+    "difficulty": 2,
+    "completionDate": "2026-09-20",
+    "commitHashes": [
+      "832bbc5"
+    ],
+    "closureNote": "closed manually by user"
+  },
+  {
+    "taskNumber": 233,
+    "version": "c0a05a99788e4766087ae92f0df51bc7f82c2663",
+    "title": "[folder 3] Rebuild the awaitingTesting folder when it is on the wrong branch and holds no work",
+    "userDescription": "3. `ensureStagingWorktree` rebuilds the shared `awaitingTesting` folder on the expected branch when the folder is on the wrong branch and holds no work.\n   WHY: after a user commit on the folder's branch, `git status --porcelain` is never empty again, so the check at `stagingWorktree.ts:32-35` throws on every run (task 29 in relationship-mermaid). No work is in the folder; git only reports a stale index.\n   HOW: in `addOrVerifyLinkedWorktree`, comment out the `status --porcelain` check and the `rmSync` at `stagingWorktree.ts:32-38`. Write the work rule inline. Holds work: throw with the folder path, the found branch, and `git status --porcelain`. Holds no work: `git worktree remove --force`, `git worktree prune`, `git worktree add --force`. Add two tests in `tests/stagingWorktreeStale.test.ts`. The first puts the folder on the user's branch, commits on that branch in the source checkout, and expects a rebuild on `staging`. The second adds an untracked file and expects the throw.",
+    "chainGoal": [
+      "When a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it. The chain is [folder 1] to [folder 9] from specs/awaiting-testing-folder.md."
+    ],
+    "goal": [
+      "- `node --test tests/stagingWorktreeStale.test.ts` passes, including the two new tests described in this task's `tests` field.",
+      "- `rg -n 'ls-files.*--others.*--exclude-standard' scripts/tackle-tasks/shared/stagingWorktree.ts` matches the new work-rule check inside `addOrVerifyLinkedWorktree`.",
+      "- `node --test scripts/tackle-tasks/shared/stagingWorktree.test.ts` still passes, confirming the case where the folder really does hold work is unchanged.",
+      "- `node --test scripts/tackle-tasks/shared/occurrences.test.ts` still passes, confirming a caller that reaches `ensureStagingWorktree` indirectly through `loadSourceManifest` is unaffected."
+    ],
+    "notInScope": [
+      "- renaming the shared folder itself: done by [folder 2]",
+      "- removing the pre-existing `staging`-named folder from disk: owned by [folder 4]",
+      "- pointing the merge tool's `--merge` CLI at the `staging` branch: owned by [folder 5]"
+    ],
+    "problemSolvedByTask": "After a user commit on the shared folder's branch, `git status --porcelain` reports a stale index every time even though no real work sits in the folder, so the wrong-branch guard throws on every pipeline run instead of only when work would actually be lost.",
+    "description": "addOrVerifyLinkedWorktree in scripts/tackle-tasks/shared/stagingWorktree.ts, when the folder's branch does not match the expected branch, currently throws whenever git status --porcelain is non-empty and otherwise deletes the folder with rmSync and re-adds it with git worktree add --force. That porcelain check treats a stale index (left behind by a commit made elsewhere on the same branch) the same as real uncommitted work, so it throws even when nothing would be lost. The fix replaces that check with the spec's inline work rule: the folder holds work when git diff --quiet exits non-zero, or git ls-files --others --exclude-standard prints a line; nothing else counts. Holding work still throws, with the folder path, the found branch, and the full git status --porcelain output in the error message for diagnostics. Holding no work now rebuilds through git itself, git worktree remove --force then git worktree prune then git worktree add --force, instead of an fs-level rmSync, so no stale worktree administrative state survives the rebuild. Only the second branch of addOrVerifyLinkedWorktree changes; the first branch (folder missing or not a live worktree at all) is untouched.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/shared/stagingWorktree.ts",
+      "tests/stagingWorktreeStale.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "Two new tests in tests/stagingWorktreeStale.test.ts, built on the existing makeShapeFixture(\"one-submodule\", \"at-head\", 501) style fixture and the existing git() support helper. Test 1, test_ensureStagingWorktree_rebuildsOntoStagingWhenTheFolderIsOnTheUsersBranchWithOnlyAStaleCommit: after building the fixture and calling ensureStagingWorktree(fixture.rootPath, \"staging\") once, checkout a branch named \"feature-x\" inside the built awaitingTesting folder (git(worktreePath, \"checkout\", \"-B\", \"feature-x\")); then, in the fixture's own source checkout (not the folder), checkout \"feature-x\", write a file, commit it, and checkout back to the branch the source checkout started on. Call ensureStagingWorktree(fixture.rootPath, \"staging\") again and assert it does not throw and that git(worktreePath, \"branch\", \"--show-current\") equals the exact string \"staging\". Test 2, test_ensureStagingWorktree_throwsWhenTheFolderOnTheWrongBranchHoldsAnUntrackedFile: repeat the same setup (folder checked out onto \"feature-x\"), then write an untracked file named \"scratch.txt\" inside the folder with no git add. Call ensureStagingWorktree(fixture.rootPath, \"staging\") and assert it throws an Error whose message includes the folder path, includes the exact string \"feature-x\", and includes the exact string \"scratch.txt\".",
+    "difficulty": 5,
+    "completionDate": "2026-09-20",
+    "commitHashes": [
+      "3aa30b5",
+      "8f07a04"
+    ],
+    "closureNote": "closed manually by user"
+  },
+  {
+    "taskNumber": 234,
+    "version": "e4f2d83d7eb16610d5701993a1462219c0502dc7",
+    "title": "[folder 4] By hand: remove every old staging-named worktree folder on this machine",
+    "userDescription": "4. The old folder named `staging` is gone from every repo on this machine that ran the pipeline.\n   WHY: the old folder still holds the `staging` branch. `git branch -f staging` refuses while another checkout holds the branch, so the first run after step 2 fails.\n   HOW: by hand, once per repo. Run `git -C <repo> worktree list` to find the `.../taskTools-wt/<repo>-<hash>/staging` line. Then run `git -C <repo> worktree remove --force <that path>` and `git -C <repo> worktree prune`. No pipeline code, no test. Only this machine runs the pipeline.",
+    "chainGoal": [
+      "When a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it. The chain is [folder 1] to [folder 9] from specs/awaiting-testing-folder.md."
+    ],
+    "goal": [
+      "- `ls \"${TMPDIR:-/tmp}/taskTools-wt\"` lists every `<repo>-<hash>` convention directory that ever ran the pipeline on this machine, with the command run and its output pasted.",
+      "- for each directory listed, `git -C \"${TMPDIR:-/tmp}/taskTools-wt/<repo>-<hash>/staging\" worktree list` shows the source repo's path (the worktree's linked main checkout), with the command run and its output pasted.",
+      "- for each source repo found, after running `git -C <repo> worktree remove --force <the .../staging path>` and `git -C <repo> worktree prune`, `git -C <repo> worktree list` no longer prints that `.../staging` line, with all commands and their output pasted."
+    ],
+    "notInScope": [
+      "- renaming the shared folder or changing its rebuild logic: owned by [folder 2] and [folder 3]",
+      "- pointing the merge tool's `--merge` CLI at `staging`: owned by [folder 5]",
+      "- proving a real tackle-tasks run finishes without the wrong-branch throw: owned by [folder 8]"
+    ],
+    "problemSolvedByTask": "The check proves no leftover worktree named literally `staging` still holds the `staging` branch on this machine, which would otherwise make `git branch -f staging` refuse and fail the first pipeline run after [folder 2] renames the folder.",
+    "description": "This is a by-hand, check-only task with no pipeline code and no test, scoped to this one machine, the only machine that runs the pipeline today. The old worktree folders were created under the convention directory resolveTaskWorktreeConventionDirectory builds in scripts/shared/prepareTasks.ts, one per repo, and each one's staging subfolder still holds the staging branch under its pre-rename name. git worktree remove --force followed by git worktree prune, run once per repo from that repo's own checkout, is the only cleanup git offers for a linked worktree; there is no bulk command. This task is done when every repo that ever ran the pipeline on this machine has had its old staging worktree removed, confirmed by git worktree list no longer listing it.",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 1,
+    "completionDate": "2026-09-20",
+    "commitHashes": [],
+    "closureNote": "by hand: 3 real-repo staging worktrees removed, rescan of repos under Programming shows none; 2198 test-fixture worktrees left out of scope by user ruling"
+  },
+  {
+    "taskNumber": 235,
+    "version": "03275a6af1016e6724f9571b42e79596469b6c71",
+    "title": "[folder 5] Point the merge tool's shared folder at staging, never the user's branch",
+    "userDescription": "5. The merge tool checks out `staging` in the shared `awaitingTesting` folder, never the user's branch.\n   WHY: `runMergeCli` at `mergeTaskWorktrees.ts:888,895` passes `parentSource.sourceBranch`, the user's current branch. That put the folder on `develop` on 2026-09-14.\n   HOW: comment out the two lines and write them again with `\"staging\"` for both `ensureStagingWorktree` and `mergeGroupBranchIntoRepo`. `MERGE_WORKTREES.ts:17-20` already passes `\"staging\"`. Add one test in `tests/mergeTaskWorktrees.test.ts` that runs the `--merge` CLI from a repo on the user's current branch and expects the shared folder on `staging`.",
+    "chainGoal": [
+      "When a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it. The chain is [folder 1] to [folder 9] from specs/awaiting-testing-folder.md."
+    ],
+    "goal": [
+      "- `sed -n '883,896p' scripts/merge-worktree-tasks/mergeTaskWorktrees.ts` shows `runMergeCli` passing the literal `\"staging\"` to both `ensureStagingWorktree` and `mergeGroupBranchIntoRepo`, with the old `parentSource.sourceBranch` argument commented out (not deleted), with the command run and its output pasted.",
+      "- `node --test tests/mergeTaskWorktrees.test.ts` passes, including a new test that runs the `--merge` CLI from a repo whose current branch is not `staging` and asserts the shared `awaitingTesting` folder ends up checked out on `staging`.",
+      "- `node --test scripts/tackle-tasks/runFullSuite/MERGE_WORKTREES.test.ts` still passes, confirming the pipeline's own merge step, which already hardcodes `\"staging\"` the same way, is unaffected."
+    ],
+    "notInScope": [
+      "- any use of `parentSource.sourceBranch` outside `runMergeCli`'s two calls: not touched by this item",
+      "- removing the pre-existing `staging`-named folder from disk: owned by [folder 4]",
+      "- the merge brief's wording about which branch the work lands on: owned by [folder 6]"
+    ],
+    "problemSolvedByTask": "`runMergeCli` passes `parentSource.sourceBranch`, the user's current branch, to `ensureStagingWorktree` and `mergeGroupBranchIntoRepo`, so the shared folder ends up checked out on whatever branch the user happened to be on; that put the folder on `develop` on 2026-09-14 instead of always landing on `staging`.",
+    "description": "runMergeCli in scripts/merge-worktree-tasks/mergeTaskWorktrees.ts calls collectRepositorySources(repoRoot, \"staging\"), but collectRepositorySources in scripts/shared/repositoryBranches.ts sets the parent path's sourceBranch to whatever branch is currently checked out in repoRoot, ignoring the rootBranch string passed in. So parentSource.sourceBranch is really the user's own branch, and runMergeCli forwards it to both ensureStagingWorktree and mergeGroupBranchIntoRepo, checking the shared folder out onto that branch instead of staging. MERGE_WORKTREES.ts already fixes the same class of bug for the pipeline's own merge step: its baseBranch function comments out a git rev-parse call and returns the literal \"staging\" instead, and this task follows that exact pattern for the two call sites inside runMergeCli. Only those two argument expressions change; parentSource.sourceBranch itself, collectRepositorySources, and every other caller are untouched.",
+    "modifiableFiles": [
+      "scripts/merge-worktree-tasks/mergeTaskWorktrees.ts",
+      "tests/mergeTaskWorktrees.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "New test in tests/mergeTaskWorktrees.test.ts, e.g. test_runMergeCli_checksOutTheSharedFolderOntoStagingNeverTheUsersBranch: build a temp repo with the existing makeTempRepoWithCommit() helper, create a branch named \"staging\" on it, then checkout a different branch named \"develop\" as the repo's current branch (this is the user's branch the CLI must not use). Build a task worktree/group for that repo with the existing makeGroup helper. Run `execFileSync(\"node\", [\"--no-inspect\", SCRIPT, \"--merge\", worktree], { cwd: repoRoot, encoding: \"utf8\" })`. After the call, assert that `git(stagingWorktreePath(repoRoot), \"branch\", \"--show-current\")` equals the exact string \"staging\", not \"develop\".",
+    "difficulty": 4,
+    "completionDate": "2026-09-20",
+    "commitHashes": [
+      "46b5c32"
+    ],
+    "closureNote": "verified by user: goal tests pass"
+  },
+  {
+    "taskNumber": 236,
+    "version": "cb1b0d59605c31f167c79187a5a3b3e59b18e1c8",
+    "title": "[folder 6] Fix the merge brief's wrong-branch sentence",
+    "userDescription": "6. The merge brief tells the user that merged work is on the `staging` branch in the `awaitingTesting` folder.\n   WHY: `mergeWorktreeTasksBrief.ts:45-46` promises the work lands on the branch the user was on, and step 5 makes that false.\n   HOW: `brief` is a template literal, so replace the sentence. Add one test in `tests/mergeWorktreeTasksBrief.test.ts` that checks the new sentence and that the old \"the branch you were on\" wording is gone. Add one `.replace()` in the byte-for-byte test so the pinned old wording maps onto the new one.\n\nUser ruling (2026-09-18): old sentence (byte-exact): \"note that those tasks' work is now on the branch you were on when you ran `--discover`.\" New sentence: \"note that those tasks' work is now on the `staging` branch in the `awaitingTesting` folder.\" In tests/mergeWorktreeTasksBrief.test.ts, add one `.replace()` to the existing chain that maps the old sentence to the new one. The old sentence holds an apostrophe (`tasks'`) and the rest of the chain uses single-quoted strings, so write this call with double-quoted arguments. Add an assertion that `brief` no longer matches `/branch you were on/`. No other file pins the old wording.",
+    "chainGoal": [
+      "When a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it. The chain is [folder 1] to [folder 9] from specs/awaiting-testing-folder.md."
+    ],
+    "goal": [
+      "- `rg \"branch you were on\" scripts/merge-worktree-tasks/mergeWorktreeTasksBrief.ts` finds no match.",
+      "- `node --test tests/mergeWorktreeTasksBrief.test.ts` passes, including a new test asserting `brief` does not match `/branch you were on/`.",
+      "- `node scripts/merge-worktree-tasks/mergeWorktreeTasksBrief.ts` prints a line reading: note that those tasks' work is now on the `staging` branch in the `awaitingTesting` folder."
+    ],
+    "notInScope": [
+      "- Making the merge tool actually check `staging` into the shared folder: that's [folder 5].",
+      "- Rebuilding the shared folder when it is on the wrong branch and holds no work: that's [folder 3].",
+      "- Running the full test-suite baseline: that's [folder 7]."
+    ],
+    "problemSolvedByTask": "mergeWorktreeTasksBrief.ts tells the agent to promise the user their merged work landed on the branch they were on when they ran --discover. Once [folder 5] makes the merge tool always check work into staging inside the shared awaitingTesting folder, that promise is false and sends the user to look for their work on the wrong branch.",
+    "description": "mergeWorktreeTasksBrief.ts exports brief, a template literal used both as the /merge-worktree-tasks prompt and as a byte-for-byte fixture in mergeWorktreeTasksBrief.test.ts, which rebuilds an expected string from a pinned pre-refactor commit's SKILL.md body through a chain of .replace()/.replaceAll() calls and asserts brief equals it exactly. The sentence that follows a successful --merge call is a plain string inside that template literal; the fix is a text substitution with no logic change. The existing .replace()/.replaceAll() chain needs one more .replace() call mapping the old sentence onto the new one, written with double-quoted arguments because the old sentence contains an apostrophe. A second, independent test assertion confirms the old wording is fully gone by checking that brief no longer matches a regex for it. No other file in the repo pins the old sentence.",
+    "modifiableFiles": [
+      "scripts/merge-worktree-tasks/mergeWorktreeTasksBrief.ts",
+      "tests/mergeWorktreeTasksBrief.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "In tests/mergeWorktreeTasksBrief.test.ts, add one .replace() call to the existing .replace()/.replaceAll() chain that builds `expected` in the byte-for-byte test. The call maps the exact old sentence \"note that those tasks' work is now on the branch you were on when you ran `--discover`.\" onto the exact new sentence \"note that those tasks' work is now on the `staging` branch in the `awaitingTesting` folder.\" Write this call with double-quoted string arguments, since the old sentence contains an apostrophe and the rest of the chain uses single-quoted strings. Add a new, separate test whose body is exactly: assert.doesNotMatch(brief, /branch you were on/); — this proves the old wording is gone from `brief` independent of the byte-for-byte comparison.",
+    "difficulty": 3,
+    "completionDate": "2026-09-20",
+    "commitHashes": [
+      "fb91a9c",
+      "bf8e12d",
+      "e6c4327"
+    ],
+    "closureNote": "verified by user: goal tests pass"
+  },
+  {
+    "taskNumber": 237,
+    "version": "881f444682b12885c7355d3f39811c82fb35c14c",
+    "title": "[folder 7] Full suite passes",
+    "userDescription": "7. `npm run test:baseline` passes with no failure outside `.taskTools/knownFailingTests.json`.\n   WHY: steps 2 to 6 each ran only their own test file.\n   HOW: one agent runs the baseline once and fixes code, never tests.",
+    "chainGoal": [
+      "When a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it. The chain is [folder 1] to [folder 9] from specs/awaiting-testing-folder.md."
+    ],
+    "goal": [
+      "- `npm run test:baseline` exits 0 with no failures outside `.taskTools/knownFailingTests.json`, confirming [folder 2] through [folder 6] leave no regression, with the command run and its output pasted."
+    ],
+    "notInScope": [
+      "- Any code change: this is a check-only task; a failure here is fixed by returning to whichever of [folder 2] through [folder 6] caused it, not by editing here.",
+      "- Rewriting the known-failing-tests baseline: only `/task-tests` may do that, and only when the user asks."
+    ],
+    "problemSolvedByTask": "Check-only item: [folder 2] through [folder 6] each ran only their own test file, so nothing so far has proven that running all of them together leaves the full suite at its committed baseline.",
+    "description": "This is a check-only task with no code change: run npm run test:baseline (scripts/shared/checkTestBaseline.ts) and paste its output. A pass confirms every prior item in the chain, [folder 2] through [folder 6], leaves the suite in the same state as the committed .taskTools/knownFailingTests.json baseline. A failure not already in that baseline means a prior chain item introduced a regression, fixed by returning to that item, never by editing here.",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 1,
+    "completionDate": "2026-09-20",
+    "commitHashes": [
+      "fbec2b9"
+    ],
+    "closureNote": "verified by user: npm run test:baseline in the folder worktree reported failing 4, known 4, new 0, baseline ok"
+  },
+  {
+    "taskNumber": 238,
+    "version": "6acb1ca6d9e2899f4428acfeff19e6681d41b284",
+    "title": "[folder 8] Real run in relationship-mermaid finishes clean",
+    "userDescription": "8. A real tackle-tasks run in `~/Programming/relationship-mermaid` finishes without the wrong-branch throw.\n   WHY: that repo holds the real broken folder from task 29, so it proves steps 3 and 4 on the case that failed.\n   HOW: run `git -C ~/Programming/relationship-mermaid worktree list`. It shows `.../awaitingTesting [staging]` and no `.../staging` line. Paste the command and its output.",
+    "chainGoal": [
+      "When a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it. The chain is [folder 1] to [folder 9] from specs/awaiting-testing-folder.md."
+    ],
+    "goal": [
+      "- Running a real tackle-tasks invocation in `~/Programming/relationship-mermaid` finishes with no wrong-branch throw, with the command and its full pasted output.",
+      "- `git -C ~/Programming/relationship-mermaid worktree list` afterward shows a line ending `.../awaitingTesting [staging]` and no line ending `.../staging`, with the command and its output pasted."
+    ],
+    "notInScope": [
+      "- Any code change: this is a check-only task proven against a real repo outside this one.",
+      "- Rebuilding the folder or fixing the merge tool: those changes are [folder 3] and [folder 5]."
+    ],
+    "problemSolvedByTask": "relationship-mermaid holds the real broken shared-folder case that first surfaced the wrong-branch throw. Running the pipeline there for real is the only proof that [folder 3] and [folder 4] actually fix that throw on the case that caused it, not just in a clean fixture.",
+    "description": "This is a check-only task with no code change. It runs a real tackle-tasks pipeline invocation in ~/Programming/relationship-mermaid, a separate repo outside this one, whose shared checkout folder is the actual broken case the earlier chain items target. Passing means the run completes with no wrong-branch throw, and git -C ~/Programming/relationship-mermaid worktree list shows the shared folder renamed to awaitingTesting and sitting on staging, with no remaining line for an old folder still named staging. As of this writing, that repo's worktree list still shows the old `.../staging` folder checked out on `develop`, the pre-fix broken state the spec describes; this task is only meaningful once [folder 2] through [folder 5] have landed and a fresh run has been made there.",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 1,
+    "completionDate": "2026-09-22",
+    "commitHashes": [],
+    "closureNote": "closed manually by user; the PREFLIGHT_OK_Q route fix it waited on is in the tree, and the catch-up chain 245 to 251 is blocked behind it"
+  },
+  {
+    "taskNumber": 239,
+    "version": "77b16841cae29d285bfd39f5fba2588a66dde1a1",
+    "title": "[folder 9] Goal: the awaitingTesting-folder chain holds",
+    "userDescription": "9. Goal: when a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it.\n\nUser ruling (2026-09-18): [folder 9] checks the literal goal written in the spec's item 9, not \"[folder 7] and [folder 8] hold\": when a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. Each goal line is a by-hand check of that statement with an exact command and exact expected output — for example: the branch state before the launch, the launch command, then `git worktree list` showing one folder named awaitingTesting on branch staging, and the staging tip containing the user's branch tip. Still check-only: no code change, hasTests false, tests \"\".",
+    "chainGoal": [
+      "When a user launches a tackle-tasks run and their current branch has diverged from staging, the pipeline merges or fast-forwards staging in one shared checkout folder named awaitingTesting. That folder is always on the staging branch, never on the user's branch. If the folder is left in a broken state and holds no work, the pipeline repairs it on its own, and no run throws because of it. The chain is [folder 1] to [folder 9] from specs/awaiting-testing-folder.md."
+    ],
+    "goal": [
+      "- Before launching: on a branch with commits both staging lacks and that staging has ahead of it (diverged from staging), record `git rev-parse HEAD` for that branch and for `staging`, pasted.",
+      "- Launching a tackle-tasks run (e.g. `/tackle-tasks`) on that diverged branch completes with no throw, with the run command and its output pasted.",
+      "- Afterward, `git -C <repo> worktree list` shows exactly one shared-checkout line ending `awaitingTesting [staging]`, with no line for a folder named plain `staging`, with the command and its output pasted.",
+      "- `git -C <the awaitingTesting path> branch --show-current` prints `staging`, not the user's own branch name, with the command and its output pasted.",
+      "- `git -C <the awaitingTesting path> merge-base --is-ancestor <the user's branch tip recorded above> HEAD` exits 0, confirming the user's branch tip landed in staging's tip through the merge or fast-forward, with the command and its exit code pasted.",
+      "- With the `awaitingTesting` folder first put on the wrong branch and left holding no work (`git -C <the awaitingTesting path> status --porcelain` prints nothing), a fresh tackle-tasks run rebuilds it onto `staging` with no throw: the run's exit code is 0 and `git -C <the awaitingTesting path> branch --show-current` prints `staging` afterward, with the setup steps, the run command, and its output pasted."
+    ],
+    "notInScope": [
+      "- Any code change: this is a check-only task, like every other \"Goal:\" item in this spec.",
+      "- Adding a permanent automated fixture for the diverged-branch or broken-folder setup: both are done by hand for this check only."
+    ],
+    "problemSolvedByTask": "Check-only item: proves by hand, with real commands and pasted output, that the chain's own literal stated goal holds today — a diverged branch drives a merge or fast-forward of staging inside one shared awaitingTesting folder, that folder is never checked out to the user's own branch, and a broken, work-free folder repairs itself with no throw.",
+    "description": "This is a check-only task with no code change. It proves by hand, with real commands and pasted output, the exact statement specs/awaiting-testing-folder.md's item 9 copies from the file's own opening paragraph: a tackle-tasks run on a branch diverged from staging merges or fast-forwards staging inside one shared checkout folder named awaitingTesting; that folder sits on staging both before and after the run, never on the user's own branch; and when the folder is left on the wrong branch holding no work, a run rebuilds it onto staging without throwing. Each clause gets its own by-hand check: a diverged-branch run followed by `git worktree list` and a `merge-base --is-ancestor` check proves the merge-or-fast-forward and folder-naming clauses, a `branch --show-current` check on the shared folder proves it is never the user's own branch, and a broken-and-empty-folder setup followed by a rerun that exits 0 proves the self-repair clause.",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 1,
+    "run": {
+      "active": false,
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/mermaid-62164a4b/task-239",
+      "leaseRunId": "e8f0fdd2-77c3-45ea-ad06-484e04e26d1b",
+      "history": [
+        {
+          "runId": "e8f0fdd2-77c3-45ea-ad06-484e04e26d1b",
+          "startedAt": "2026-09-22T08:06:03-07:00",
+          "endedAt": "2026-09-22T08:10:46-07:00",
+          "exitType": "merge-failed",
+          "exitNote": "paused, merge-failed: nothing landed after 2 merge attempts (task branch \"task-239\" is already merged in occurrence \"root\", but its merge-time commit record is missing; refusing to guess from the current staging tip). worktree preserved. Find out why the merge failed from the run log and packets under .taskTools/runs. Fixable: fix it, then run /tackle-tasks [239] MERGE_WORKTREES to merge again. Not fixable: ask the user what to do.",
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": {
+            "stepId": "run-full-suite-0",
+            "passed": true,
+            "testFiles": [],
+            "createdTestFiles": [],
+            "deletedTestFiles": [],
+            "missingTests": false,
+            "output": "",
+            "newFailingTests": [],
+            "knownFailingTests": [],
+            "checkedAt": "2026-09-22T08:10:38-07:00"
+          },
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            },
+            {
+              "stepId": "rebase",
+              "script": "rebaseTaskWorktree",
+              "result": {
+                "lock": "acquired",
+                "heldByOwner": null,
+                "recoveryCommand": null,
+                "conflicted": false,
+                "stoppedAt": null,
+                "conflictedFilePaths": [],
+                "failureReason": null
+              },
+              "occurrenceIds": [
+                ""
+              ],
+              "worktreeHeads": [
+                {
+                  "occurrenceId": "",
+                  "head": "5645f82b81263b7a04e111a7110b6ee4733712d7"
+                }
+              ]
+            }
+          ],
+          "sourceTipsAtRebase": [
+            {
+              "occurrenceId": "",
+              "baseBranch": "staging",
+              "sourceTip": "5645f82b81263b7a04e111a7110b6ee4733712d7"
+            }
+          ],
+          "rebaseStepReceipt": {
+            "stepId": "rebase",
+            "occurrenceIds": [
+              ""
+            ],
+            "worktreeHeads": [
+              {
+                "occurrenceId": "",
+                "head": "5645f82b81263b7a04e111a7110b6ee4733712d7"
+              }
+            ],
+            "sourceTips": [
+              {
+                "occurrenceId": "",
+                "baseBranch": "staging",
+                "sourceTip": "5645f82b81263b7a04e111a7110b6ee4733712d7"
+              }
+            ]
+          },
+          "attempts": {
+            "merge": 2
+          },
+          "countedPasses": {
+            "merge": [
+              "83d16276-ee8e-457d-8811-904d3a3201ad",
+              "7ac2de2b-d0b5-4ec3-9279-b1efaea2b055"
+            ]
+          },
+          "tailCursor": null
+        }
+      ]
+    },
+    "completionDate": "2026-09-22",
+    "closureNote": "closed manually by user; check-only task, all goal lines fail on this branch because the awaitingTesting code lives only on branch worktree-folder",
+    "commitHashes": []
+  },
+  {
+    "taskNumber": 240,
+    "version": "def4f037e5191d2f93f4ace15cee0eeb6069f443",
+    "title": "[launch 1] Start: five things stop a launch today",
+    "userDescription": "1. Start: five things stop a launch today. Catch-up conflict: `scripts/shared/prepareTasks.ts:271-274` throws. Resumed worktree, rebase conflict: `preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts:68-77` goes to `ARE_2_CONFLICT_FIXES_DONE_Q`, which goes to `FAILURES_EXIT` after 2 tries. Resumed worktree, no notes file: `IS_PREVIOUS_RUN_RESUMABLE_Q.ts:11-21` goes to `FAILURES_EXIT`. File outside the fence: `DOES_FENCE_COVER_WORKTREE_Q.ts:19-26` goes to `FAILURES_EXIT`. Listed file missing: `INIT_SUBMODULES_RECURSIVELY.ts:22-30` goes to `FAILURES_EXIT`. The two diagram folders each hold a copy of the preamble.",
+    "chainGoal": [
+      "A tackle-tasks launch reaches the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet. The chain is [launch 1] to [launch 22] from specs/launch-reaches-planning-alone.md."
+    ],
+    "goal": [
+      "- `sed -n '260,280p' scripts/shared/prepareTasks.ts` confirms `resolveOrCreateStagingTip`'s diverged-merge branch throws when a real conflict remains after the merge attempt, with the command run and its output pasted.",
+      "- `cat scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts` confirms a rebase conflict routes to `pipeline-commitMergeConflictFixIfNeeded.mmd::ARE_2_CONFLICT_FIXES_DONE_Q`, and that block's 2-try stop still goes to `FAILURES_EXIT`, with the command run and its output pasted.",
+      "- `cat scripts/tackle-tasks/preambleStatusCheck/IS_PREVIOUS_RUN_RESUMABLE_Q.ts` confirms a resumed worktree with no notes file routes to `pipeline-failuresExit.mmd::FAILURES_EXIT`, with the command run and its output pasted.",
+      "- `cat scripts/tackle-tasks/preambleStatusCheck/DOES_FENCE_COVER_WORKTREE_Q.ts` confirms a file outside the task's fence routes to `pipeline-failuresExit.mmd::FAILURES_EXIT`, with the command run and its output pasted.",
+      "- `cat scripts/tackle-tasks/preambleStatusCheck/INIT_SUBMODULES_RECURSIVELY.ts` confirms a `modifiableFiles` entry missing on disk routes to `pipeline-failuresExit.mmd::FAILURES_EXIT`, with the command run and its output pasted.",
+      "- `fd -a pipeline-preambleStatusCheck.mmd diagrams/` lists one copy in `diagrams/tackle-tasks/` and one in `diagrams/tackle-tasks-fast/`, with the command run and its output pasted."
+    ],
+    "notInScope": [
+      "- Changing any of the five stops' behavior: that is later [launch N] items in this chain.",
+      "- The 2-try stop at `ARE_2_CONFLICT_FIXES_DONE_Q` for the rebase that runs after implementation: explicitly excluded from this whole chain's goal, and untouched by every [launch] item."
+    ],
+    "problemSolvedByTask": "Confirms the current list of five launch-stopping behaviors is accurate in the mermaid worktree before any later [launch] item changes one of them, so later items are graded against real current behavior instead of stale spec text.",
+    "description": "This is a check-only task with no code change, following the shape of every 'Start:' item in this project's chains: it re-confirms, with a command and its pasted output, the five things that stop a tackle-tasks launch today. Re-checked in the mermaid worktree against the spec's citations: prepareTasks.ts's diverged-merge branch throws when a real (non-submodule) conflict remains unresolved after the merge attempt inside its throwaway worktree; REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts routes a rebase conflict to ARE_2_CONFLICT_FIXES_DONE_Q, whose 2-try stop still goes to FAILURES_EXIT and is unchanged by this chain; IS_PREVIOUS_RUN_RESUMABLE_Q.ts routes a resumed worktree with no notes file to FAILURES_EXIT; DOES_FENCE_COVER_WORKTREE_Q.ts routes a file outside the task's fence to FAILURES_EXIT; INIT_SUBMODULES_RECURSIVELY.ts routes a modifiableFiles entry that is missing on disk to FAILURES_EXIT; and both diagrams/tackle-tasks/ and diagrams/tackle-tasks-fast/ hold their own copy of pipeline-preambleStatusCheck.mmd.",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 1,
+    "blockedBy": [],
+    "run": {
+      "active": false,
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/mermaid-62164a4b/task-240",
+      "leaseRunId": "3fc7d577-eb26-4a4b-a9e1-cfef56fcfe50",
+      "history": [
+        {
+          "runId": "3fc7d577-eb26-4a4b-a9e1-cfef56fcfe50",
+          "startedAt": "2026-09-22T10:00:11-07:00",
+          "endedAt": "2026-09-22T10:10:05-07:00",
+          "exitType": "merge-failed",
+          "exitNote": "paused, merge-failed: nothing landed after 2 merge attempts (task branch \"task-240\" is already merged in occurrence \"root\", but its merge-time commit record is missing; refusing to guess from the current staging tip). worktree preserved. Find out why the merge failed from the run log and packets under .taskTools/runs. Fixable: fix it, then run /tackle-tasks [240] MERGE_WORKTREES to merge again. Not fixable: ask the user what to do.",
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": {
+            "stepId": "run-full-suite-0",
+            "passed": true,
+            "testFiles": [],
+            "createdTestFiles": [],
+            "deletedTestFiles": [],
+            "missingTests": false,
+            "output": "",
+            "newFailingTests": [],
+            "knownFailingTests": [],
+            "checkedAt": "2026-09-22T10:09:57-07:00"
+          },
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            },
+            {
+              "stepId": "rebase",
+              "script": "rebaseTaskWorktree",
+              "result": {
+                "lock": "acquired",
+                "heldByOwner": null,
+                "recoveryCommand": null,
+                "conflicted": false,
+                "stoppedAt": null,
+                "conflictedFilePaths": [],
+                "failureReason": null
+              },
+              "occurrenceIds": [
+                ""
+              ],
+              "worktreeHeads": [
+                {
+                  "occurrenceId": "",
+                  "head": "5645f82b81263b7a04e111a7110b6ee4733712d7"
+                }
+              ]
+            }
+          ],
+          "attempts": {
+            "clarify": 1,
+            "merge": 2
+          },
+          "countedPasses": {
+            "clarify": [
+              "7628ec40-0e07-4fda-9702-c9c16a35d278"
+            ],
+            "merge": [
+              "0525689a-1981-4286-9c06-900c831877de",
+              "9be95b0e-a269-4ee7-bdd5-8462dfdecf43"
+            ]
+          },
+          "sourceTipsAtRebase": [
+            {
+              "occurrenceId": "",
+              "baseBranch": "staging",
+              "sourceTip": "5645f82b81263b7a04e111a7110b6ee4733712d7"
+            }
+          ],
+          "rebaseStepReceipt": {
+            "stepId": "rebase",
+            "occurrenceIds": [
+              ""
+            ],
+            "worktreeHeads": [
+              {
+                "occurrenceId": "",
+                "head": "5645f82b81263b7a04e111a7110b6ee4733712d7"
+              }
+            ],
+            "sourceTips": [
+              {
+                "occurrenceId": "",
+                "baseBranch": "staging",
+                "sourceTip": "5645f82b81263b7a04e111a7110b6ee4733712d7"
+              }
+            ]
+          },
+          "tailCursor": null
+        }
+      ]
+    },
+    "clarifyRequest": "This check-only task's sixth done-criterion cannot be met in the mermaid worktree. Five checks hold: prepareTasks.ts:271-274 (the `stillUnmerged !== \"\"` throw) throws on a real remaining conflict; REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts routes a rebase conflict to `pipeline-commitMergeConflictFixIfNeeded.mmd::ARE_2_CONFLICT_FIXES_DONE_Q`; IS_PREVIOUS_RUN_RESUMABLE_Q.ts routes a non-resumable worktree to `pipeline-failuresExit.mmd::FAILURES_EXIT`; DOES_FENCE_COVER_WORKTREE_Q.ts routes an out-of-fence file to `B_AMEND_TASK_FILE_LIST` (note: its exit `next` is `B_AMEND_TASK_FILE_LIST`, not directly `FAILURES_EXIT` as the description states); INIT_SUBMODULES_RECURSIVELY.ts routes a missing modifiableFiles entry to `B_ADD_MISSING_FILES_TO_CREATES_FILES` (again not directly `FAILURES_EXIT`). But check 6 fails: `fd -a pipeline-preambleStatusCheck.mmd diagrams/` returns only `diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd`. There is NO `diagrams/tackle-tasks-fast/` folder in this worktree (only `diagrams/prompts` and `diagrams/tackle-tasks` exist). The description's claim 'the two diagram folders each hold a copy of the preamble' is stale: `tackle-tasks-fast` is still named in scripts/tackle-tasks/generateSteps.ts and specs/launch-reaches-planning-alone.md step 5, but the folder itself is absent mid-mermaid-chain. The task owns no files (`modifiableFiles: []`, `createsFiles: []`) and is check-only, so I cannot create the second copy. Decision needed: should check 6 be dropped/rewritten to 'one folder' as the current Start baseline, or should this task block until the `diagrams/tackle-tasks-fast/` folder is restored by another task?",
+    "completionDate": "2026-09-22",
+    "closureNote": "closed manually by user; check-only task, its branch has no commits so the merge cannot record it",
+    "commitHashes": []
   }
 ]

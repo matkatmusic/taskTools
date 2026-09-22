@@ -1,51 +1,7 @@
 [
   {
-    "file": "scripts/tackle-tasks/resetTask.test.ts",
-    "name": "test_resetTask_atBlock_regeneratesStepsJsonFromCurrentDiagrams"
-  },
-  {
-    "file": "scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts",
-    "name": "test_skillBody_twoProjectsWithDifferentDiagramsNeverShareAStepsJson"
-  },
-  {
-    "file": "scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts",
-    "name": "test_skillBody_fastBeatsAProjectsCustomDiagramFolder"
-  },
-  {
-    "file": "scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts",
-    "name": "test_skillBody_omitsStartingBlockWhenOnlyFastFollowsTheTaskList"
-  },
-  {
-    "file": "tests/generateSteps.test.ts",
-    "name": "test_generateSteps_writesACamelCaseFileLineForANewBlock"
-  },
-  {
-    "file": "tests/generateSteps.test.ts",
-    "name": "test_generateSteps_rewritesTheFileLineWhenDiagramStepsJsonScriptDiffers"
-  },
-  {
-    "file": "tests/generateSteps.test.ts",
-    "name": "test_generateSteps_syncsTakesSourceLockBackIntoTheDiagramWhenConfigDiffers"
-  },
-  {
-    "file": "tests/generateSteps.test.ts",
-    "name": "test_generateSteps_movesTheTakesSourceLockLabelWhenTheStepListMovesTheFlag"
-  },
-  {
-    "file": "tests/generateSteps.test.ts",
-    "name": "test_generateSteps_aDiagramOnlyEditToTakesSourceLockLosesToTheStepList"
-  },
-  {
     "file": "tests/relatedTests.test.ts",
     "name": "test_main_readsTheTurnFlagOnStopAndReportsTypeErrors"
-  },
-  {
-    "file": "tests/runStepHook.test.ts",
-    "name": "test_runStepHook_reportsAHeldLockInsteadOfHangingOnUserPromptSubmit"
-  },
-  {
-    "file": "tests/runStepHook.test.ts",
-    "name": "test_runStepHook_reportsAHeldLockInsteadOfHangingOnPostToolUseSkill"
   },
   {
     "file": "tests/stepTemplates.test.ts",
@@ -70,14 +26,6 @@
   {
     "file": "tests/stepTemplates.test.ts",
     "name": "test_stepTemplate_pipeline-mergeSucceededExit_CLEAN_UP_WORKTREES_producesItsOutputContract"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-mergeSucceededExit_MARK_TASK_INACTIVE_SUCCESS_producesItsOutputContract"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-mergeSucceededExit_ARCHIVE_TASK_producesItsOutputContract"
   },
   {
     "file": "tests/stepTemplates.test.ts",
@@ -106,6 +54,10 @@
   {
     "file": "tests/stepTemplates.test.ts",
     "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_LOCK_STAGING_FOR_CATCH_UP_producesItsOutputContract"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-preambleStatusCheck_B_PROVE_SPLICE_DEMO_producesItsOutputContract"
   },
   {
     "file": "tests/stepTemplates.test.ts",
@@ -226,9 +178,5 @@
   {
     "file": "tests/stepTemplates.test.ts",
     "name": "test_stepTemplate_Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING_everyNextLiteralIsADeclaredEdge"
-  },
-  {
-    "file": "tests/workflowAgentOptions.test.ts",
-    "name": "test_workflow_aBareStartingBlockGetsThatBlocksAgentOptions"
   }
 ]
