@@ -1,9 +1,33 @@
 {
-    "input": {},
+    "input": {
+        "box": "B_LOCK_STAGING_FOR_CATCH_UP",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/abs/project",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z",
+        "acquired": true,
+        "heldByOwner": ""
+    },
     "output": {
         "box": "Q_WAS_CATCH_UP_LOCK_ACQUIRED_Q",
         "scriptSignal": "continue",
-        "note": "WAS_CATCH_UP_LOCK_ACQUIRED_Q.ts for Q_WAS_CATCH_UP_LOCK_ACQUIRED_Q",
-        "input": ""
+        "next": "Q_CATCH_UP_STAGING",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/abs/project",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z"
     }
 }

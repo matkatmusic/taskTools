@@ -1,9 +1,31 @@
 {
-    "input": {},
+    "input": {
+        "box": "Q_WAS_CATCH_UP_LOCK_ACQUIRED_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/abs/project",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z"
+    },
     "output": {
         "box": "Q_HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q",
         "scriptSignal": "continue",
-        "note": "HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q.ts for Q_HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q",
-        "input": ""
+        "next": "B_WAIT_FOR_CATCH_UP_LOCK",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/abs/project",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z"
     }
 }

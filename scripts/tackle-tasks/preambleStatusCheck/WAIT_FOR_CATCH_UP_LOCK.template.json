@@ -1,9 +1,30 @@
 {
-    "input": {},
+    "input": {
+        "box": "Q_HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/abs/project",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z"
+    },
     "output": {
         "box": "B_WAIT_FOR_CATCH_UP_LOCK",
         "scriptSignal": "continue",
-        "note": "WAIT_FOR_CATCH_UP_LOCK.ts for B_WAIT_FOR_CATCH_UP_LOCK",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/abs/project",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z"
     }
 }

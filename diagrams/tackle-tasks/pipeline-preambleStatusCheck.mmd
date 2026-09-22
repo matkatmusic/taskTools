@@ -10,7 +10,7 @@ B_FIX_RESUMED_REBASE_CONFLICTS["FIX_RESUMED_REBASE_CONFLICTS<br/>file:scripts/ta
 B_IS_DIFFICULTY_7_PLUS_Q["IS_DIFFICULTY_7_PLUS_Q<br/>block:pipeline-planTheTask.mmd::IS_DIFFICULTY_7_PLUS_Q<br/>(next diagram)"]
 B_LOCK_STAGING_FOR_CATCH_UP["LOCK_STAGING_FOR_CATCH_UP<br/>file:scripts/tackle-tasks/preambleStatusCheck/LOCK_STAGING_FOR_CATCH_UP.ts<br/>try once to lock the source repo<br/>(copy of LOCK_SOURCE_REPO)<br/>takesSourceLock:true"]
 B_MARK_TASK_ACTIVE["MARK_TASK_ACTIVE<br/>file:scripts/tackle-tasks/preambleStatusCheck/MARK_TASK_ACTIVE.ts<br/>mark the task active in tasks.json"]
-B_PROVE_SPLICE_DEMO["PROVE_SPLICE_DEMO<br/>prove a diagram-only edit splices a new block into the pipeline<br/>file:scripts/tackle-tasks/pipeline-preambleStatusCheck/proveSpliceDemo.ts"]
+%% B_PROVE_SPLICE_DEMO["PROVE_SPLICE_DEMO<br/>prove a diagram-only edit splices a new block into the pipeline<br/>file:scripts/tackle-tasks/pipeline-preambleStatusCheck/proveSpliceDemo.ts"]
 B_REPORT_ONLY_EXIT["REPORT_ONLY_EXIT<br/>block:pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT<br/>(next diagram)"]
 B_RESET_WORKTREE["RESET_WORKTREE<br/>file:scripts/tackle-tasks/preambleStatusCheck/RESET_WORKTREE.ts<br/>reset the worktree"]
 B_TAKE_WORKTREE_LEASE["TAKE_WORKTREE_LEASE<br/>file:scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE.ts<br/>take the worktree lease for this run"]
@@ -125,7 +125,7 @@ Q_INIT_SUBMODULES_RECURSIVELY --> Q_CHOICE_INIT_SUBMODULES_RECURSIVELY_Y
 Q_CHOICE_INIT_SUBMODULES_RECURSIVELY_Y --> B_DOCUMENT_GENERATION
 B_FIX_CATCH_UP_CONFLICTS --> Q_COMMIT_CATCH_UP_MERGE
 B_MARK_TASK_ACTIVE --> Q_DOES_WORKTREE_EXIST_Q
-B_MARK_TASK_ACTIVE --> B_PROVE_SPLICE_DEMO
+%% B_MARK_TASK_ACTIVE --> B_PROVE_SPLICE_DEMO
 B_CREATE_WORKTREE --> B_TAKE_WORKTREE_LEASE
 B_TAKE_WORKTREE_LEASE -- "docs mode: AUTOGEN" --> Q_INIT_SUBMODULES_RECURSIVELY
 B_TAKE_WORKTREE_LEASE_BEFORE_RESET --> B_RESET_WORKTREE

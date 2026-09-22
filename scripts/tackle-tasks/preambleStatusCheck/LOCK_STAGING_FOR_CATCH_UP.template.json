@@ -1,9 +1,31 @@
 {
-    "input": {},
+    "input": {
+        "box": "Q_PREFLIGHT_OK_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/lockSourceRepo/fixtures",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": ""
+    },
     "output": {
         "box": "B_LOCK_STAGING_FOR_CATCH_UP",
         "scriptSignal": "continue",
-        "note": "LOCK_STAGING_FOR_CATCH_UP.ts for B_LOCK_STAGING_FOR_CATCH_UP",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/abs/project",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z",
+        "acquired": true,
+        "heldByOwner": ""
     }
 }
