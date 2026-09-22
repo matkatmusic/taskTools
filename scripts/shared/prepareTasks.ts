@@ -12,6 +12,7 @@ import { goalText, leadingTaskNumbers, readTaskFile, resolveTaskFiles, taskFiles
 import { collectRepositorySources, createBranchInEveryRepository, currentBranchName, submodulePaths, type RepositorySource } from "./repositoryBranches.ts";
 import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
 import { ORIGIN_REMOTE_ABSENT, ORIGIN_REMOTE_PRESENT, WORKTREE_HOLDS_NO_RETAINED_WORK, WORKTREE_HOLDS_RETAINED_WORK } from "./resultCodes.ts";
+import { mergeHeadIntoStaging } from "./mergeHelpers.ts";
 
 export type PreparedTask = {
     number: number;
@@ -247,34 +248,40 @@ export function resolveOrCreateStagingTip(repoRoot: string): string {
     if (headIsAncestorOfStaging.status === 0) return found;
     // Diverged: neither is an ancestor of the other; merge HEAD into staging in a throwaway detached worktree.
     const tmp = mkdtempSync(join(tmpdir(), "staging-merge-"));
-    execFileSync("git", ["-C", repoRoot, "worktree", "add", "--detach", tmp, STAGING_REF], { stdio: ["ignore", "ignore", "inherit"] });
-    const merge = spawnSync("git", ["-C", tmp, "merge", "--no-edit", headTip], { encoding: "utf8" });
-    if (merge.status !== 0) {
-        // Temp worktree has no submodule checkout, so git cannot merge a gitlink; record the sub's fresh staging tip.
-        const unmergedListing = execFileSync("git", ["-C", tmp, "ls-files", "-u", "-z"], { encoding: "utf8" });
-        const unmergedEntries: string[] = [];
-        for (const entry of unmergedListing.split("\0")) {
-            const isEmpty = entry.length === 0;
-            if (isEmpty) continue;
-            unmergedEntries.push(entry);
-        }
-        const unmergedSubmodulePaths = new Set<string>();
-        for (const entry of unmergedEntries) {
-            const [info, path] = entry.split("\t");
-            if (info.split(" ")[0] === "160000") unmergedSubmodulePaths.add(path);
-        }
-        for (const path of unmergedSubmodulePaths) {
-            const subTip = readStagingTip(join(repoRoot, path));
-            if (subTip === null) throw new Error(`no staging tip recorded for submodule "${path}" in "${repoRoot}"`);
-            execFileSync("git", ["-C", tmp, "update-index", "--cacheinfo", `160000,${subTip},${path}`], { stdio: ["ignore", "ignore", "inherit"] });
-        }
-        const stillUnmerged = execFileSync("git", ["-C", tmp, "ls-files", "-u"], { encoding: "utf8" }).trim();
-        if (stillUnmerged !== "") {
-            throw new Error(`submodule merge left unresolved paths in "${tmp}": ${merge.stderr}\n${stillUnmerged}`);
-        }
-        execFileSync("git", ["-C", tmp, "commit", "--no-edit"], { stdio: ["ignore", "ignore", "inherit"] });
+    // RETIRED (task 246): moved to mergeHeadIntoStaging in scripts/shared/mergeHelpers.ts.
+    // execFileSync("git", ["-C", repoRoot, "worktree", "add", "--detach", tmp, STAGING_REF], { stdio: ["ignore", "ignore", "inherit"] });
+    // const merge = spawnSync("git", ["-C", tmp, "merge", "--no-edit", headTip], { encoding: "utf8" });
+    // if (merge.status !== 0) {
+        // // Temp worktree has no submodule checkout, so git cannot merge a gitlink; record the sub's fresh staging tip.
+        // const unmergedListing = execFileSync("git", ["-C", tmp, "ls-files", "-u", "-z"], { encoding: "utf8" });
+        // const unmergedEntries: string[] = [];
+        // for (const entry of unmergedListing.split("\0")) {
+            // const isEmpty = entry.length === 0;
+            // if (isEmpty) continue;
+            // unmergedEntries.push(entry);
+        // }
+        // const unmergedSubmodulePaths = new Set<string>();
+        // for (const entry of unmergedEntries) {
+            // const [info, path] = entry.split("\t");
+            // if (info.split(" ")[0] === "160000") unmergedSubmodulePaths.add(path);
+        // }
+        // for (const path of unmergedSubmodulePaths) {
+            // const subTip = readStagingTip(join(repoRoot, path));
+            // if (subTip === null) throw new Error(`no staging tip recorded for submodule "${path}" in "${repoRoot}"`);
+            // execFileSync("git", ["-C", tmp, "update-index", "--cacheinfo", `160000,${subTip},${path}`], { stdio: ["ignore", "ignore", "inherit"] });
+        // }
+        // const stillUnmerged = execFileSync("git", ["-C", tmp, "ls-files", "-u"], { encoding: "utf8" }).trim();
+        // if (stillUnmerged !== "") {
+            // throw new Error(`submodule merge left unresolved paths in "${tmp}": ${merge.stderr}\n${stillUnmerged}`);
+        // }
+        // execFileSync("git", ["-C", tmp, "commit", "--no-edit"], { stdio: ["ignore", "ignore", "inherit"] });
+    // }
+    // const mergedTip = execFileSync("git", ["-C", tmp, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    const mergeResult = mergeHeadIntoStaging(repoRoot, headTip, STAGING_REF, tmp);
+    if (typeof mergeResult !== "string") {
+        throw new Error(`merge of HEAD into ${STAGING_REF} left unresolved paths in "${tmp}"; run git status there`);
     }
-    const mergedTip = execFileSync("git", ["-C", tmp, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    const mergedTip = mergeResult;
     execFileSync("git", ["-C", repoRoot, "worktree", "remove", "--force", tmp], { stdio: ["ignore", "ignore", "inherit"] });
     moveStagingBranchTo(repoRoot, mergedTip);
     return readStagingTip(repoRoot)!;
