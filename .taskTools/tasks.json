@@ -1222,5 +1222,36 @@
         "reason": "chain order: [launch 21] comes before [launch 22]"
       }
     ]
+  },
+  {
+    "taskNumber": 262,
+    "version": "dae592c153bafd52941bd42811cc3cb5aa8cb60c",
+    "title": "Test fixtures must not register worktrees in the main repo or leak CREATE_WORKTREE-root-* dirs",
+    "userDescription": "Stop test fixtures from registering worktrees against the main repo and from leaking CREATE_WORKTREE-root-* dirs. Two changes. (1) In scripts/shared/prepareTasks.ts, resolveTaskWorktreeConventionDirectory must read `process.env.TASKTOOLS_WT_ROOT ?? tmpdir()` instead of `tmpdir()`; the main checkout /Users/matkatmusicllc/Programming/taskTools already holds this exact uncommitted change plus its test tests/prepareTasksWorktreePath.test.ts (test_resolveTaskWorktreeConventionDirectory_honorsTheTasktoolsWtRootOverride); port both into the worktree-mermaid branch. (2) In scripts/tackle-tasks/shared/stagingWorktree.ts, addOrVerifyLinkedWorktree must throw before `git worktree add` when `git -C sourceCheckoutPath rev-parse --show-toplevel` is not realpathSync(sourceCheckoutPath). WHY: on 2026-09-15 four staging worktrees were registered in the main repo's .git/worktrees pointing at fixture temp dirs, which broke CREATE_WORKTREE at moveStagingBranchTo. Cause: block templates set projectRoot to fixture folders inside the main checkout; fixtures/setup.sh runs `rm -rf .git && git init` in place; tests/stepTemplates.test.ts rebuilds every fixture and spawns real block scripts in the same node --test run as other files, so a worker that hits the folder while .git is absent makes git climb to the main checkout. The leak (1115 CREATE_WORKTREE-root-* dirs in $TMPDIR/taskTools-wt) is the same convention-directory function ignoring the per-process TASKTOOLS_WT_ROOT that tests/support/wtRoot.ts sets. Files: scripts/shared/prepareTasks.ts, scripts/tackle-tasks/shared/stagingWorktree.ts, tests/prepareTasksWorktreePath.test.ts, scripts/tackle-tasks/shared/stagingWorktree.test.ts. hasTests true. Not part of the launch chain; no blockedBy.",
+    "goal": [
+      "- node --test tests/prepareTasksWorktreePath.test.ts and node --test scripts/tackle-tasks/shared/stagingWorktree.test.ts both pass, including the two new tests.",
+      "- After one full npm run test:baseline, ls $TMPDIR/taskTools-wt shows no new CREATE_WORKTREE-root-* folder.",
+      "- After that suite run, git -C ~/Programming/taskTools worktree list has no new entry."
+    ],
+    "notInScope": [
+      "- Deleting the 1115 leaked CREATE_WORKTREE-root-* dirs; by hand, later.",
+      "- Moving fixtures out of the main checkout; the fixtures/setup.sh git-init-in-place pattern stays.",
+      "- The launch chain tasks 241-261; this task is standalone."
+    ],
+    "problemSolvedByTask": "Test fixtures register work trees against the main repository's .git and leak temporary directories, which broke CREATE_WORKTREE on 2026-09-15 and every test process is not isolated and shares one permanent $TMPDIR/taskTools-wt pool instead of the per process root that wtRoot.ts sets.",
+    "description": "resolveTaskWorktreeConventionDirectory in scripts/shared/prepareTasks.ts reads process.env.TASKTOOLS_WT_ROOT ?? tmpdir(); port that line and its test from the main checkout. addOrVerifyLinkedWorktree in scripts/tackle-tasks/shared/stagingWorktree.ts throws before git worktree add when git -C sourceCheckoutPath rev-parse --show-toplevel is not realpathSync(sourceCheckoutPath).",
+    "modifiableFiles": [
+      "scripts/shared/prepareTasks.ts",
+      "scripts/tackle-tasks/shared/stagingWorktree.ts",
+      "tests/prepareTasksWorktreePath.test.ts",
+      "scripts/tackle-tasks/shared/stagingWorktree.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "a) With TASKTOOLS_WT_ROOT set, resolveTaskWorktreeConventionDirectory returns a path under it. b) addOrVerifyLinkedWorktree throws when sourceCheckoutPath is a plain folder inside a git repo but has no .git of its own; no worktree gets registered in the parent repo.",
+    "difficulty": 3
   }
 ]
