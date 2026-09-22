@@ -3,7 +3,14 @@
     "output": {
         "box": "Q_COMMIT_CATCH_UP_MERGE",
         "scriptSignal": "continue",
-        "note": "COMMIT_CATCH_UP_MERGE.ts for Q_COMMIT_CATCH_UP_MERGE",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "",
+        "projectRoot": "/abs/project",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": ""
     }
 }

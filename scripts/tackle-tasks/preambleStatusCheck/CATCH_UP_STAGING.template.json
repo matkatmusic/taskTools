@@ -1,9 +1,29 @@
 {
-    "input": {},
+    "input": {
+        "box": "Q_WAS_CATCH_UP_LOCK_ACQUIRED_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/create-example",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": ""
+    },
     "output": {
         "box": "Q_CATCH_UP_STAGING",
         "scriptSignal": "continue",
-        "note": "CATCH_UP_STAGING.ts for Q_CATCH_UP_STAGING",
-        "input": ""
+        "next": "B_MARK_TASK_ACTIVE",
+        "taskNumber": 1,
+        "runId": "",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/create-example",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": ""
     }
 }

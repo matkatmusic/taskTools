@@ -1,6 +1,6 @@
 {
     "input": {
-        "box": "Q_IS_TASK_ACTIVE_Q",
+        "box": "Q_CATCH_UP_STAGING",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "",
