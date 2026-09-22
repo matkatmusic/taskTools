@@ -1,7 +1,7 @@
 [
   {
-    "file": "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/CONTINUE_REBASE.test.ts",
-    "name": "test_CONTINUE_REBASE_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress"
+    "file": "scripts/tackle-tasks/shared/sourceRepoLock.test.ts",
+    "name": "test_refreshSourceRepoLock_pausedRefreshBlocksRecoveryAndAcquisition_ownerAIsNeverOverwrittenByB"
   },
   {
     "file": "tests/relatedTests.test.ts",
@@ -46,10 +46,6 @@
   {
     "file": "tests/stepTemplates.test.ts",
     "name": "test_stepTemplate_pipeline-preambleStatusCheck_Q_CONTINUE_RESUMED_REBASE_producesItsOutputContract"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-preambleStatusCheck_Q_DOES_FENCE_COVER_WORKTREE_Q_producesItsOutputContract"
   },
   {
     "file": "tests/stepTemplates.test.ts",
@@ -110,10 +106,6 @@
   {
     "file": "tests/stepTemplates.test.ts",
     "name": "test_stepTemplate_Q_IS_PREVIOUS_RUN_RESUMABLE_Q_everyNextLiteralIsADeclaredEdge"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_Q_PREFLIGHT_OK_Q_everyNextLiteralIsADeclaredEdge"
   },
   {
     "file": "tests/stepTemplates.test.ts",

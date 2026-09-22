@@ -13,7 +13,7 @@ import { readJsonFile } from "../tackle-tasks/shared/readJsonFile.ts";
 import { taskWorkflowDirectory } from "../shared/taskFiles.ts";
 // import { currentBranchName, submodulePaths } from "../shared/repositoryBranches.ts";
 import { resetTask } from "../tackle-tasks/resetTask.ts";
-import { buildLockOwner, readSourceRepoLock } from "../tackle-tasks/shared/sourceRepoLock.ts";
+import { buildLockOwner, readSourceRepoLock, releaseSourceRepoLock } from "../tackle-tasks/shared/sourceRepoLock.ts";
 import { findResumeEntry, findStartAtBlockEntry, prepareResume } from "../tackle-tasks/shared/resumeRun.ts";
 import { resetAttemptCounts, writeTailCursor } from "../tackle-tasks/shared/taskRunState.ts";
 import { SOURCE_LOCK_REACHABLE, SOURCE_LOCK_UNREACHABLE } from "../shared/resultCodes.ts";
@@ -327,8 +327,15 @@ function buildFailure(
     return { ok: false, ran: boxesRun, errors, outcome: null, report };
   const worktree = typeof context.packet.worktree === "string" ? context.packet.worktree : "";
   const worktreeExists = worktree !== "" && existsSync(worktree);
-  if (!worktreeExists)
+  if (!worktreeExists) {
+    const failingBlockHoldsSourceLock = isInsideSourceLock(`${context.step.diagram}::${context.step.box}`) === SOURCE_LOCK_REACHABLE;
+    if (failingBlockHoldsSourceLock) {
+      const projectRootIsAGitRepo = existsSync(join(String(context.packet.projectRoot), ".git"));
+      if (projectRootIsAGitRepo)
+        releaseSourceRepoLock(String(context.packet.projectRoot), buildLockOwner(String(context.packet.runId), Number(context.packet.taskNumber)));
+    }
     return { ok: false, ran: boxesRun, errors, outcome: null, report };
+  }
   if (!STEPS_BY_KEY.has(FAILURES_EXIT_KEY))
     return { ok: false, ran: boxesRun, errors, outcome: null, report };
 

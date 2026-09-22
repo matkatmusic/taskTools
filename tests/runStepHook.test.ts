@@ -2364,3 +2364,28 @@ test("test_runStepHook_aTranslatorThatReturnsTheWrongShapeFailsLoudOnThatHop", (
     assert.match(result.errors[0], /arithmetic\.mmd::C input breaks its contract/);
     assert.match(result.errors[1], /expected is missing/);
 });
+
+test("test_runStepHook_releasesTheSourceLockWhenABlockThrowsBeforeItsWorktreeExists", () => {
+    // A git-initialized project root whose source-repo lock is held by run r1, task 7.
+    const projectRoot = realpathSync(mkdtempSync(join(tmpdir(), "run-step-lock-")));
+    spawnSync("git", ["-C", projectRoot, "init", "-q"]);
+    const lockOwner = buildLockOwner("r1", 7);
+    acquireSourceRepoLock(projectRoot, lockOwner);
+    // A lock block whose next block throws, so the throwing block sits inside the source lock.
+    const configFile = configWith((writeStep, folder) => {
+        const throwingScript = join(folder, "A-throws.ts");
+        writeFileSync(throwingScript, "throw new Error('boom');\n");
+        return {
+            "pipeline-lockSourceRepo.mmd": [{ box: "LOCK_SOURCE_REPO", script: writeStep("LOCK_SOURCE_REPO", { scriptSignal: "continue" }), takesSourceLock: true, next: ["A"] }],
+            "one.mmd": [{ box: "A", script: throwingScript, next: [] }],
+        };
+    });
+    // The packet names a worktree path that does not exist on disk.
+    const startInput = { taskNumber: 7, runId: "r1", projectRoot, worktree: join(projectRoot, "not-created-yet") };
+    // The lock really is held by this run before the walk.
+    assert.equal(readSourceRepoLock(projectRoot)?.owner, lockOwner);
+    const { result } = runHook(`/run-step A ${JSON.stringify(startInput)}`, configFile);
+    // The walk fails, and the lock file is gone.
+    assert.equal(result.ok, false);
+    assert.equal(readSourceRepoLock(projectRoot), null);
+});
