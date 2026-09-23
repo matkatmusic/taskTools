@@ -1,9 +1,22 @@
 {
-    "input": {},
-    "output": {
-        "box": "B_FIX_CATCH_UP_CONFLICTS",
+    "input": {
+        "box": "Q_CATCH_UP_STAGING",
         "scriptSignal": "continue",
-        "note": "FIX_CATCH_UP_CONFLICTS.ts for B_FIX_CATCH_UP_CONFLICTS",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/create-example",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "agentAnswer": {
+        "message": "",
+        "additionalData": {
+            "resolved": true,
+            "unresolvedPaths": []
+        }
     }
 }
