@@ -342,40 +342,6 @@
     "difficulty": 4
   },
   {
-    "taskNumber": 259,
-    "version": "970cedb3821ee0658d09ea689f56b42893935b6a",
-    "title": "[launch 20] Build a fixture repo for the four preamble stops",
-    "userDescription": "20. A script builds a fresh fixture repo in a temp folder with four tasks, and sets up the state for one case at a time.\n    WHY: the four stops are hard to produce by hand, and a fresh build makes each proof run repeatable.\n    HOW: `bun tests/support/buildPreambleProofRepo.ts build` makes a repo with no submodule: branch `main`, branch `staging`, files `a.txt` to `d.txt`, and `.taskTools/tasks.json`. Each entry has the fields of the fixture at `tests/tackleTasksAcceptance.test.ts:49-62`. Task 1 edits `a.txt`. Task 2 edits `b.txt` and is blocked by 1. Task 3 edits `c.txt` and is blocked by 2. Task 4 lists `modifiableFiles: [\"d.txt\", \"e.txt\"]`, where `e.txt` does not exist, and is blocked by 3. Each task adds one line to its file, so each run finishes and unblocks the next. `prepare 1`: one new commit on `main` only, so `staging` is behind. `prepare 2`: one commit on `main` and one on `staging` that change the same line of `z.txt`. `prepare 3`: the script fakes a resumed worktree: the task-3 worktree, its lease, an ended run record with a notes file, and one uncommitted edit to `stray.txt`. `prepare 4`: nothing, because `e.txt` is already missing. The script prints the repo path.\n\nUser ruling (2026-09-18): the fields the fixture at `tests/tackleTasksAcceptance.test.ts` uses for the task object are `taskNumber`, `title`, `userDescription`, `description`, `modifiableFiles`, `createsFiles`, `readOnlyFiles`, `goal`, `notInScope`, `hasTests`, `difficulty`, and `schemaVersion`; this task's four fixture tasks follow that same shape, with `blockedBy: [{taskNumber, reason}]` added to tasks 2 through 4. `prepare 3`'s resumed-worktree state is described by field, not by a line anchor into `scripts/tackle-tasks/shared/isTaskRunResumable.ts`, since [launch 13] splits that file before this task lands: task 3's `run.history` needs one ended run record (`endedAt` set, `implementationNotesFile` pointing at a file that really exists inside the worktree); `run.worktree` is the worktree path; `run.leaseRunId` is that ended run's `runId`; and a lease file at `<worktreePath>.lease` on disk holds `{\"runId\": \"<that same runId>\"}`. `modifiedFiles` and `commits` on that run record may stay empty, since the stray-edit fence check reads live `git diff`, not those fields.",
-    "chainGoal": [
-      "A tackle-tasks launch reaches the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet. The chain is [launch 1] to [launch 22] from specs/launch-reaches-planning-alone.md."
-    ],
-    "goal": [
-      "- `bun tests/support/buildPreambleProofRepo.ts build` prints a fresh repo path whose `.taskTools/tasks.json` holds four tasks: task 1 edits `a.txt`, task 2 edits `b.txt` and is blocked by 1, task 3 edits `c.txt` and is blocked by 2, task 4 lists `modifiableFiles: [\"d.txt\", \"e.txt\"]` and is blocked by 3, with `e.txt` absent from disk.",
-      "- Running `prepare 1` on that repo leaves exactly one new commit on `main` that `staging` does not have, and none the other way.",
-      "- Running `prepare 2` on a fresh build leaves one commit on `main` and one on `staging`, both changing the same line of `z.txt`, so a merge between them conflicts.",
-      "- Running `prepare 3` on a fresh build leaves a `task-3` worktree on disk, task 3's `run.worktree`, `run.leaseRunId`, and one ended `run.history` entry with a real `implementationNotesFile`, a matching `<worktreePath>.lease` file holding that run's `runId`, and one uncommitted edit to `stray.txt` inside the worktree.",
-      "- `node --test tests/support/buildPreambleProofRepo.test.ts` passes."
-    ],
-    "notInScope": [
-      "- Running a real tackle-tasks launch against the fixture repo: that is [launch 21]'s job.",
-      "- Any change to the preamble pipeline blocks themselves: this task only builds a fixture repo for them to run against."
-    ],
-    "problemSolvedByTask": "The four preamble stops (staging behind, a diverged merge conflict, a resumed worktree with a stray edit, a missing listed file) are hard to reproduce by hand, and a scripted build makes each proof run repeatable.",
-    "description": "This task adds a new script, tests/support/buildPreambleProofRepo.ts, that builds a disposable fixture repository for proving the four preamble stops by hand. It reuses the git-fixture helpers already in tests/support/gitFixtures.ts, a thin git wrapper and a committed-repo builder, rather than reimplementing git plumbing. The build subcommand creates a repo with branches main and staging, four files a.txt through d.txt, and a .taskTools/tasks.json with four tasks shaped like the fixture task object in tests/tackleTasksAcceptance.test.ts, chained by blockedBy. Each of the four prepare subcommands moves the repo into one failure-stop shape: prepare 1 advances main past staging; prepare 2 diverges main and staging on the same line of a shared file so a merge conflicts; prepare 3 fakes a resumed worktree by writing task 3's run.worktree, run.leaseRunId, and one ended run.history entry with a real implementationNotesFile, plus a matching lease file and an uncommitted stray.txt edit inside the worktree; prepare 4 needs no extra state, since task 4's e.txt is already absent. The run field's shape comes from the TaskRunState type in scripts/tackle-tasks/shared/taskRunState.ts, and the lease file's runId shape comes from that same module's lease-path convention. This fixture state depends only on those on-disk fields, so it keeps working once the resumability check that reads it is split into two functions by an earlier task in this chain. [launch 21] is the consumer: it runs build once, then prepare N and a real launch for each of the four cases.",
-    "modifiableFiles": [],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "createsFiles": [
-      "tests/support/buildPreambleProofRepo.ts",
-      "tests/support/buildPreambleProofRepo.test.ts"
-    ],
-    "schemaVersion": "1.0.1",
-    "hasTests": true,
-    "tests": "tests/support/buildPreambleProofRepo.test.ts, five tests, each starting from a fresh `build` (the script's build subcommand run in a fresh temp directory): test_buildPreambleProofRepo_build_writesTheFourTaskFixture: run `build`; assert the printed repo path exists, `git -C <repo> branch --list` shows both `main` and `staging`, `a.txt` through `d.txt` exist and `e.txt` does not, and `.taskTools/tasks.json` in that repo is an array of exactly 4 entries where task 1's `modifiableFiles` is `[\"a.txt\"]` with no `blockedBy`, task 2's `modifiableFiles` is `[\"b.txt\"]` with `blockedBy: [{taskNumber: 1, reason: <a non-empty string>}]`, task 3's `modifiableFiles` is `[\"c.txt\"]` with `blockedBy: [{taskNumber: 2, reason: <a non-empty string>}]`, and task 4's `modifiableFiles` is `[\"d.txt\", \"e.txt\"]` with `blockedBy: [{taskNumber: 3, reason: <a non-empty string>}]`. test_buildPreambleProofRepo_prepare1_leavesStagingBehind: run `build` then `prepare 1`; assert `git -C <repo> rev-list --count staging..main` prints `1` and `git -C <repo> rev-list --count main..staging` prints `0`. test_buildPreambleProofRepo_prepare2_leavesADivergedConflict: run `build` then `prepare 2`; assert `git -C <repo> rev-list --count staging..main` prints `1`, `git -C <repo> rev-list --count main..staging` prints `1`, and `git -C <repo> merge-tree $(git -C <repo> merge-base main staging) main staging` reports a conflict marker on `z.txt`. test_buildPreambleProofRepo_prepare3_fakesAResumedWorktree: run `build` then `prepare 3`; read `.taskTools/tasks.json` and assert task 3's `run.worktree` is a path that exists on disk, `run.history` has exactly one entry with `endedAt` non-null and `implementationNotesFile` set to a path that exists inside `run.worktree`, and `run.leaseRunId` equals that entry's `runId`; assert `<run.worktree>.lease` exists on disk and its parsed JSON `runId` field equals `run.leaseRunId`; assert `git -C <run.worktree> status --porcelain` lists `stray.txt`. test_buildPreambleProofRepo_prepare4_leavesTheListedFileMissing: run `build` then `prepare 4`; assert `e.txt` does not exist anywhere in the repo and task 4's `modifiableFiles` in `.taskTools/tasks.json` is still `[\"d.txt\", \"e.txt\"]`, unchanged from build.",
-    "difficulty": 6
-  },
-  {
     "taskNumber": 260,
     "version": "56ec0cbee32625e1aabfa991cfc92fb3c32631df",
     "title": "[launch 21] Prove all four preamble stops reach planning by hand",
@@ -403,13 +369,7 @@
     "schemaVersion": "1.0.1",
     "hasTests": false,
     "tests": "",
-    "difficulty": 2,
-    "blockedBy": [
-      {
-        "taskNumber": 259,
-        "reason": "chain order: [launch 20] comes before [launch 21]"
-      }
-    ]
+    "difficulty": 2
   },
   {
     "taskNumber": 261,
