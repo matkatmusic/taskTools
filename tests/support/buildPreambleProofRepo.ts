@@ -59,7 +59,7 @@ function prepareStagingBehind(repoPath: string): void {
   git(repoPath, "commit", "-q", "-m", "main moves past staging");
 }
 
-// Case 2: main and staging each add z.txt with a different line, so the catch-up merge conflicts.  Staging's commit lands in the awaitingTesting worktree, since a real run leaves it checked out there.
+// Case 2: main and staging each commit a different z.txt; staging's commit lands in the awaitingTesting worktree.
 function prepareCatchUpConflict(repoPath: string): void {
   // Runs before main diverges, so this is a no-op when the caller already set the worktree up.
   ensureStagingWorktree(repoPath, "staging");
