@@ -10263,5 +10263,46 @@
       "7e83305"
     ],
     "closureNote": "implemented per plans/launch-10-task-249.md: CATCH_UP_STAGING.ts calls catchUpStaging and branches on the result, releasing the lock on a clean catch-up and keeping it with repository/worktreePath on conflict; MARK_TASK_ACTIVE.template.json input.box corrected to Q_CATCH_UP_STAGING"
+  },
+  {
+    "taskNumber": 250,
+    "version": "ebef15b08d39487a8036c1d36b808f51275095cb",
+    "title": "[launch 11] The FIX_CATCH_UP_CONFLICTS block returns a prompt for a subagent to fix the conflicted files",
+    "userDescription": "11. The `FIX_CATCH_UP_CONFLICTS` block returns a prompt, and a subagent fixes the conflicted files in the `task-N-catchUpMerge` worktree.\n    WHY: this is user note 2. A conflict is work for an agent, not a reason to stop the launch.\n    HOW: fill in the stub. The prompt is the same prompt that `FIX_CONFLICTS` returns near the end of the pipeline (`FIX_CONFLICTS.ts:26`, `fixConflictsPrompt` in `FixConflictsBodyEmitter.ts`). Only the worktree path and the file list differ.\n\nUser ruling (2026-09-18): `FIX_CONFLICTS.ts` calls `refreshOwnedSourceRepoLockOrThrow(projectRoot, buildLockOwner(packet.runId, packet.taskNumber))` before it writes the prompt; `FIX_CATCH_UP_CONFLICTS` runs while the lock is held and can take many minutes, so it must make the same call first. Following the user ruling on [launch 7], the HOW's \"Only the worktree path and the file list differ\" becomes \"only the worktree path differs\" -- no file list is passed; the fixing agent runs git in the worktree to see the conflicts.",
+    "chainGoal": [
+      "A tackle-tasks launch reaches the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet. The chain is [launch 1] to [launch 22] from specs/launch-reaches-planning-alone.md."
+    ],
+    "goal": [
+      "- `FIX_CATCH_UP_CONFLICTS.ts` no longer throws its generator placeholder; it returns `scriptSignal: \"prompt\"` and a prompt built from `fixConflictsPrompt` (scripts/tackle-tasks/shared/FixConflictsBodyEmitter.ts), the same emitter `FIX_CONFLICTS.ts` uses.",
+      "- Before writing the prompt, it calls `refreshOwnedSourceRepoLockOrThrow`, so a run that lost the source-repo lock throws instead of writing a stale prompt.",
+      "- The prompt is written to `<worktreePath>/plans/FIX_CATCH_UP_CONFLICTS.prompt.md` and names every path `git diff --name-only --diff-filter=U` finds unmerged in that worktree; no file list travels through the packet.",
+      "- `node --test scripts/tackle-tasks/preambleStatusCheck/FIX_CATCH_UP_CONFLICTS.test.ts` passes."
+    ],
+    "notInScope": [
+      "- Building `scripts/shared/catchUpStaging.ts` is [launch 8]; this task only consumes the `repository`/`worktreePath` payload [launch 10] produces.",
+      "- `COMMIT_CATCH_UP_MERGE`, which commits the agent's fix, is [launch 12].",
+      "- `FIX_RESUMED_REBASE_CONFLICTS`, the rebase-side sibling of this block, is a separate item outside this task's range."
+    ],
+    "problemSolvedByTask": "this is user note 2: a conflict from the catch-up merge is work for an agent, not a reason to stop the launch, so this block hands the conflict to a subagent instead of failing the run.",
+    "description": "FIX_CATCH_UP_CONFLICTS.ts is a generator-written stub in scripts/tackle-tasks/preambleStatusCheck/; it is filled in almost identically to scripts/tackle-tasks/fixConflicts/FIX_CONFLICTS.ts, which calls refreshOwnedSourceRepoLockOrThrow(projectRoot, buildLockOwner(runId, taskNumber)) before calling fixConflictsPrompt(checkoutPath, taskNumber, projectRoot, runId, sourceBranch) from scripts/tackle-tasks/shared/FixConflictsBodyEmitter.ts and writing the result to a `.prompt.md` file under the worktree's `plans/` folder. The only real differences from FIX_CONFLICTS.ts: `checkoutPath` is packet.worktreePath (the `task-N-catchUpMerge` merge worktree [launch 10] builds, not the task's own worktree), the prompt file is named `FIX_CATCH_UP_CONFLICTS.prompt.md`, and `sourceBranch` is the literal string \"staging\" (FIX_CONFLICTS.ts already hardcodes this same literal, since fixConflictsPrompt uses it only for display text). fixConflictsPrompt itself derives the conflicted-file list straight from `git diff --name-only --diff-filter=U` inside the checkout, so no file list needs to travel through the packet in either direction, matching the [launch 7] ruling that no conflict file list exists anywhere in this chain. The output packet's `box` is `B_FIX_CATCH_UP_CONFLICTS` and `scriptSignal` is `SCRIPT_SIGNAL.PROMPT`, mirroring FIX_CONFLICTS.ts's own return shape.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/preambleStatusCheck/FIX_CATCH_UP_CONFLICTS.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/FIX_CATCH_UP_CONFLICTS.template.json"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "createsFiles": [
+      "scripts/tackle-tasks/preambleStatusCheck/FIX_CATCH_UP_CONFLICTS.test.ts"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "scripts/tackle-tasks/preambleStatusCheck/FIX_CATCH_UP_CONFLICTS.test.ts, built the way scripts/tackle-tasks/fixConflicts/FIX_CONFLICTS.test.ts is (a `makeSourceRepo()` helper that inits a repo on `main` with one empty commit, and a `makeConflictedRepo(fileName)` helper that leaves a real stopped merge with an unmerged path): test_fixCatchUpConflicts_printsAPromptNamingTheConflictedPathFromTheWorktree -- setup: projectRoot = makeSourceRepo(), worktreePath = makeConflictedRepo(\"conflicted.ts\"), acquireSourceRepoLock(projectRoot, buildLockOwner(\"run-1\", 1)) already acquired; input packet has taskNumber:1, runId:\"run-1\", projectRoot, worktreePath, repository: projectRoot; expected output.box === \"B_FIX_CATCH_UP_CONFLICTS\", output.scriptSignal === \"prompt\", and the file at `<worktreePath>/plans/FIX_CATCH_UP_CONFLICTS.prompt.md` exists and its contents include `<worktreePath>/conflicted.ts`. test_fixCatchUpConflicts_runsTwiceWithTheSameInput -- same setup; call main twice with the same input; expected the second call's output deepEquals the first, and the prompt file's contents are unchanged between the two calls. test_fixCatchUpConflicts_throwsWhenTheWorktreeHasNothingUnmerged -- setup: worktreePath is a freshly-inited repo with no conflict; expected main(...) throws matching /no unmerged paths/. test_fixCatchUpConflicts_throwsWhenTheSourceLockIsNotHeldByThisRun -- setup: no lock acquired at all; expected main(...) throws matching /source repository lock/.",
+    "difficulty": 3,
+    "completionDate": "2026-09-22",
+    "commitHashes": [
+      "6dbe2fe2d39fab3fce2135795be568aa8c296178"
+    ],
+    "closureNote": "FIX_CATCH_UP_CONFLICTS.ts fills in the block: refreshes the catch-up source-repo lock, then writes the shared fixConflictsPrompt to the catch-up merge worktree; targeted tests and the stepTemplates edge tests pass"
   }
 ]
