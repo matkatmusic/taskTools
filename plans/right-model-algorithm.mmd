@@ -1,6 +1,10 @@
 %%{init: {"flowchart": {"wrappingWidth": 100000}}}%%
 flowchart TD
 
+B_TASK_STARTED[task started]
+
+%% define "successfully" per task
+
 Q_TASK_SUCCEEDED{did the model complete the task successfully?}
 Q_CHOICE_TASK_SUCCEEDED_NO[No]
 Q_CHOICE_TASK_SUCCEEDED_YES[Yes]
@@ -30,6 +34,8 @@ Q_CHOICE_COULD_BE_CHEAPER_YES[Yes]
 B_NEXT_TASK[move on to the next task]
 B_TRY_LOWER["try the next task that has the same complexity/difficulty level with a lower effort or model"]
 
+B_TASK_STARTED --> Q_TASK_SUCCEEDED
+
 Q_TASK_SUCCEEDED --> Q_CHOICE_TASK_SUCCEEDED_NO --> Q_MODEL_KNEW_ENOUGH
 Q_TASK_SUCCEEDED --> Q_CHOICE_TASK_SUCCEEDED_YES --> Q_COULD_BE_CHEAPER
 
@@ -45,4 +51,6 @@ Q_KNOW_WHY_FAILED --> Q_CHOICE_KNOW_WHY_FAILED_YES --> B_UPDATE_INSTRUCTIONS -->
 Q_COULD_BE_CHEAPER --> Q_CHOICE_COULD_BE_CHEAPER_NO --> B_NEXT_TASK
 Q_COULD_BE_CHEAPER --> Q_CHOICE_COULD_BE_CHEAPER_YES --> B_TRY_LOWER
 
-B_TRY_TASK_AGAIN --> Q_TASK_SUCCEEDED
+B_TRY_TASK_AGAIN --> B_TASK_STARTED
+B_TRY_LOWER --> B_TASK_STARTED
+B_NEXT_TASK --> B_TASK_STARTED
