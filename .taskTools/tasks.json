@@ -342,36 +342,6 @@
     "difficulty": 4
   },
   {
-    "taskNumber": 260,
-    "version": "56ec0cbee32625e1aabfa991cfc92fb3c32631df",
-    "title": "[launch 21] Prove all four preamble stops reach planning by hand",
-    "userDescription": "21. Four real tackle-tasks launches in the fixture repo, one per case, each reach the planning stage.\n    WHY: tests drive blocks with no real agent. Only a real launch proves the whole preamble.\n    HOW: for N = 1 to 4: run `prepare N`, then launch `/tackle-tasks N` in the fixture repo. Paste `.taskTools/runs/<stamp>/task-N-run-log.json`. It must list a `pipeline-planTheTask.mmd` block and no `FAILURES_EXIT` block. Run 2 must list `FIX_CATCH_UP_CONFLICTS`. Run 3 must list `AMEND_TASK_FILE_LIST`, and tasks.json must list `stray.txt`. Run 4 must list `ADD_MISSING_FILES_TO_CREATES_FILES`, and `createsFiles` must hold `e.txt`.\n\nUser ruling (2026-09-18): [launch 21] is check-only, like [launch 2], [launch 3], and every Goal item in this chain: no code change. `hasTests` is false and `tests` is the empty string. Its goal lines say exactly what to check and how, one line per case, each with the exact command and the exact expected output.",
-    "chainGoal": [
-      "A tackle-tasks launch reaches the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet. The chain is [launch 1] to [launch 22] from specs/launch-reaches-planning-alone.md."
-    ],
-    "goal": [
-      "- `bun tests/support/buildPreambleProofRepo.ts build` from [launch 20] is run once to get the fixture repo, before any of the four cases below.",
-      "- Case 1: `prepare 1` then `/tackle-tasks 1` in the fixture repo. The pasted `.taskTools/runs/<stamp>/task-1-run-log.json` lists a `pipeline-planTheTask.mmd` block and no `FAILURES_EXIT` block.",
-      "- Case 2: `prepare 2` then `/tackle-tasks 2` in the fixture repo. The pasted run log lists `B_FIX_CATCH_UP_CONFLICTS`, a `pipeline-planTheTask.mmd` block, and no `FAILURES_EXIT` block.",
-      "- Case 3: `prepare 3` then `/tackle-tasks 3` in the fixture repo. The pasted run log lists `B_AMEND_TASK_FILE_LIST` and a `pipeline-planTheTask.mmd` block with no `FAILURES_EXIT` block, and the fixture repo's `.taskTools/tasks.json` lists `stray.txt` on task 3 afterward.",
-      "- Case 4: `prepare 4` then `/tackle-tasks 4` in the fixture repo. The pasted run log lists `B_ADD_MISSING_FILES_TO_CREATES_FILES` and a `pipeline-planTheTask.mmd` block with no `FAILURES_EXIT` block, and task 4's `createsFiles` holds `e.txt` afterward."
-    ],
-    "notInScope": [
-      "- Building the fixture repo script: that is [launch 20]'s job, not this task's.",
-      "- Any code change to the preamble pipeline: this task only launches the fixture repo and pastes the resulting output, per the user ruling that it is check-only."
-    ],
-    "problemSolvedByTask": "The automated tests drive individual blocks with no real agent. Only a real launch, end to end, proves the whole preamble actually reaches the planning stage for all four stops.",
-    "description": "This is a check-only task: no code in the repository changes, and it needs no automated test. It runs the fixture script from [launch 20] four times, once per failure stop, and each time launches the real pipeline against the fixture repo instead of driving a block through a test. For each of the four cases, the reviewer runs prepare N and then a real tackle-tasks launch on task N, and pastes the resulting run log from the fixture repo's own runs folder. The four pasted run logs are the evidence: every one must reach a planning-stage block and never the `FAILURES_EXIT` block, and each case's distinguishing block, `B_FIX_CATCH_UP_CONFLICTS`, `B_AMEND_TASK_FILE_LIST`, or `B_ADD_MISSING_FILES_TO_CREATES_FILES`, must appear in its own run's log. This proves the preamble handles all four stops end to end with a real agent turn, not just through the block-level tests added earlier in this chain.",
-    "modifiableFiles": [],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "schemaVersion": "1.0.1",
-    "hasTests": false,
-    "tests": "",
-    "difficulty": 2
-  },
-  {
     "taskNumber": 261,
     "version": "d8a61f692e9fb54492a0747e77e288784bdc51dd",
     "title": "[launch 22] Goal: a tackle-tasks launch reaches planning alone",
@@ -398,13 +368,7 @@
     "schemaVersion": "1.0.1",
     "hasTests": false,
     "tests": "",
-    "difficulty": 1,
-    "blockedBy": [
-      {
-        "taskNumber": 260,
-        "reason": "chain order: [launch 21] comes before [launch 22]"
-      }
-    ]
+    "difficulty": 1
   },
   {
     "taskNumber": 262,
