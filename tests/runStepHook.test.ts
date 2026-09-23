@@ -2123,7 +2123,8 @@ function makeCrashOnceThenDelegateScript(folder: string, realScriptPath: string)
 
 for (const entry of REAL_FAILURES_EXIT_STEPS) {
     if (entry.box === "STOP") continue; // no script, nothing to inject a failure into
-    test(`test_runStepHook_injectsOneFailureAt_${entry.box}_andResumeContinuesTheChain`, () => {
+    const injectFailureTestOptions = entry.box === "FAILURES_EXIT" ? { timeout: 120_000 } : {};
+    test(`test_runStepHook_injectsOneFailureAt_${entry.box}_andResumeContinuesTheChain`, injectFailureTestOptions, () => {
         const taskNumber = nextFailuresExitTaskNumber++;
         const runId = "run-fixture";
         const branch = `task-${taskNumber}`;

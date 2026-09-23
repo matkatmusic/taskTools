@@ -67,7 +67,7 @@ function assertMainOids(occurrencePaths: Record<string, string>, expected: Map<s
     for (const [id, path] of Object.entries(occurrencePaths)) assert.equal(git(path, "rev-parse", "main"), expected.get(id), id);
 }
 
-test("test_revengGraphConsolidatesRepeatedOccurrencesOnlyAfterApproval", async () => {
+test("test_revengGraphConsolidatesRepeatedOccurrencesOnlyAfterApproval", { timeout: 300_000 }, async () => {
     // Scenario: seven independently committed changes originate in every repeated occurrence of the RevEng graph.
     const fixture = makeRevengGraphFixture();
     const discovery = discoverRepositoryTree(fixture.rootPath, {

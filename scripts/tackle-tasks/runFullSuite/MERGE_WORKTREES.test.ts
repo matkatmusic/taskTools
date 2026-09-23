@@ -87,7 +87,7 @@ function packet(input: { projectRoot: string; worktree: string; taskNumber: numb
     return JSON.stringify(input);
 }
 
-test("test_MERGE_WORKTREES_mergesEveryLayerAndReturnsMergeCommits", async () => {
+test("test_MERGE_WORKTREES_mergesEveryLayerAndReturnsMergeCommits", { timeout: 60_000 }, async () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const { worktree, taskNumber } = createLinkedWorktree(rootOrigin);
     await markActiveCommitAndRebase(rootOrigin, taskNumber, worktree, "run-30");
@@ -97,12 +97,16 @@ test("test_MERGE_WORKTREES_mergesEveryLayerAndReturnsMergeCommits", async () => 
     assert.equal(result.box, "MERGE_WORKTREES");
     assert.equal(result.merged, true);
     assert.equal(result.failureReason, "");
-    const commits = result.commits as { kind: string; occurrenceId: string }[];
+    const commits = result.commits as { kind: string; occurrenceId: string; hash: string }[];
     assert.deepEqual(commits.map((commit) => commit.kind), ["merge", "merge"]);
     assert.deepEqual(commits.map((commit) => commit.occurrenceId).sort(), ["", "child"]);
+
+    const rootMergeCommit = commits.find((commit) => commit.occurrenceId === "")!;
+    const parents = git(rootOrigin, "log", "-1", "--format=%P", rootMergeCommit.hash).split(" ").filter(Boolean);
+    assert.equal(parents.length, 2);
 });
 
-test("test_MERGE_WORKTREES_runsTwiceWithTheSameInput", async () => {
+test("test_MERGE_WORKTREES_runsTwiceWithTheSameInput", { timeout: 60_000 }, async () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const { worktree, taskNumber } = createLinkedWorktree(rootOrigin);
     await markActiveCommitAndRebase(rootOrigin, taskNumber, worktree, "run-40");
@@ -121,19 +125,20 @@ test("test_MERGE_WORKTREES_runsTwiceWithTheSameInput", async () => {
     assert.deepEqual(runAfterSecond, runAfterFirst);
 });
 
-test("test_MERGE_WORKTREES_createsAMergeCommitWithTwoParents", async () => {
-    const rootOrigin = makeSourceRepoWithSubmodule();
-    const { worktree, taskNumber } = createLinkedWorktree(rootOrigin);
-    await markActiveCommitAndRebase(rootOrigin, taskNumber, worktree, "run-31");
-
-    const result = main(packet({ projectRoot: rootOrigin, worktree, taskNumber, runId: "run-31" }));
-    assert.equal(result.merged, true);
-
-    const commits = result.commits as { occurrenceId: string; hash: string }[];
-    const rootMergeCommit = commits.find((commit) => commit.occurrenceId === "")!;
-    const parents = git(rootOrigin, "log", "-1", "--format=%P", rootMergeCommit.hash).split(" ").filter(Boolean);
-    assert.equal(parents.length, 2);
-});
+// Moved into test_MERGE_WORKTREES_mergesEveryLayerAndReturnsMergeCommits: same setup and main() call, this was only its extra assertion.
+// test("test_MERGE_WORKTREES_createsAMergeCommitWithTwoParents", async () => {
+//     const rootOrigin = makeSourceRepoWithSubmodule();
+//     const { worktree, taskNumber } = createLinkedWorktree(rootOrigin);
+//     await markActiveCommitAndRebase(rootOrigin, taskNumber, worktree, "run-31");
+//
+//     const result = main(packet({ projectRoot: rootOrigin, worktree, taskNumber, runId: "run-31" }));
+//     assert.equal(result.merged, true);
+//
+//     const commits = result.commits as { occurrenceId: string; hash: string }[];
+//     const rootMergeCommit = commits.find((commit) => commit.occurrenceId === "")!;
+//     const parents = git(rootOrigin, "log", "-1", "--format=%P", rootMergeCommit.hash).split(" ").filter(Boolean);
+//     assert.equal(parents.length, 2);
+// });
 
 // Superseded by the staging-worktree redesign: rootOrigin dirt no longer blocks a merge, so this is now false.
 /*
@@ -152,7 +157,7 @@ test("test_MERGE_WORKTREES_refusesWhenTheSourceCheckoutWentDirty", async () => {
 });
 */
 
-test("test_MERGE_WORKTREES_refusesAndMutatesNothingWhenTheLockIsHeldByAnotherRun", async () => {
+test("test_MERGE_WORKTREES_refusesAndMutatesNothingWhenTheLockIsHeldByAnotherRun", { timeout: 60_000 }, async () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const { worktree, taskNumber } = createLinkedWorktree(rootOrigin);
     await markActiveCommitAndRebase(rootOrigin, taskNumber, worktree, "run-35");

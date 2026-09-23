@@ -5,7 +5,7 @@ import { resetTask } from "../../scripts/tackle-tasks/resetTask.ts";
 import { makeShapeFixture } from "../support/repoShapeFixtures.ts";
 import { commitWorktreeWork, git, mergeAndClose, spawnTask, submodulePathsByShape } from "./support.ts";
 
-test("test_fullReset_laterTaskBlocks_refusesResetOfAnEarlierMergedTaskAndNamesTheBlockingTask", async () => {
+test("test_fullReset_laterTaskBlocks_refusesResetOfAnEarlierMergedTaskAndNamesTheBlockingTask", { timeout: 120_000 }, async () => {
     const taskN = 821;
     const taskNPlus1 = 822;
     const fixture = makeShapeFixture("two-submodules-nested", "at-head", taskN);

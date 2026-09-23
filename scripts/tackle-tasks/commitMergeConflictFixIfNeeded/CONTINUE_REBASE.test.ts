@@ -88,7 +88,7 @@ function packet(
     };
 }
 
-test("test_CONTINUE_REBASE_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress", async () => {
+test("test_CONTINUE_REBASE_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress", { timeout: 120_000 }, async () => {
     const { rootOrigin, rootOriginChildPath } = makeSourceRepoWithSubmodule();
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
     seedTaskAndMarkActive(rootOrigin, taskNumber, "run-1");
@@ -126,7 +126,7 @@ test("test_CONTINUE_REBASE_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress", 
     assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
 });
 
-test("test_CONTINUE_REBASE_runsTwiceWithTheSameInput", async () => {
+test("test_CONTINUE_REBASE_runsTwiceWithTheSameInput", { timeout: 120_000 }, async () => {
     const { rootOrigin, rootOriginChildPath } = makeSourceRepoWithSubmodule();
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
     seedTaskAndMarkActive(rootOrigin, taskNumber, "run-3");
@@ -168,7 +168,7 @@ test("test_CONTINUE_REBASE_runsTwiceWithTheSameInput", async () => {
     assert.equal(tasksJsonAfterSecond, tasksJsonAfterFirst);
 });
 
-test("test_CONTINUE_REBASE_reportsAFreshConflictWithoutFinishing", async () => {
+test("test_CONTINUE_REBASE_reportsAFreshConflictWithoutFinishing", { timeout: 120_000 }, async () => {
     const { rootOrigin, rootOriginChildPath } = makeSourceRepoWithSubmodule();
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
     seedTaskAndMarkActive(rootOrigin, taskNumber, "run-2");

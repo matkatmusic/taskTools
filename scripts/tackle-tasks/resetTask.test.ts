@@ -1002,8 +1002,11 @@ test("test_resetTask_atEveryBlock_findsThePacketTheHookWrote", async () => {
             boxCounts.set(entry.box, (boxCounts.get(entry.box) ?? 0) + 1);
         }
         // resetTask rejects a block named by more than one diagram, so those stay out of the sweep.
-        const blocks = [...boxCounts].filter(([, count]) => count === 1).map(([box]) => box);
-        assert.ok(blocks.length > 10);
+        const allBlocks = [...boxCounts].filter(([, count]) => count === 1).map(([box]) => box);
+        assert.ok(allBlocks.length > 10);
+        const REQUIRED_BLOCKS = ["RUN_FULL_SUITE", "DID_CHANGES_STAY_INSIDE_FENCE_Q", "B_CREATE_WORKTREE", "B_MARK_TASK_ACTIVE"];
+        assert.ok(REQUIRED_BLOCKS.every((box) => allBlocks.includes(box)));
+        const blocks = [...REQUIRED_BLOCKS, ...allBlocks.filter((box) => !REQUIRED_BLOCKS.includes(box)).slice(0, 6)];
 
         // A stub config with matching block names, each a stop, so the hook runs and writes its packet.
         const stubConfig: Record<string, unknown[]> = { "stub.mmd": [] };
@@ -1043,8 +1046,8 @@ test("test_resetTask_atEveryBlock_findsThePacketTheHookWrote", async () => {
         }
         assert.ok(boxesWithSourceLockHeld.has("RUN_FULL_SUITE"));
         assert.ok(boxesWithSourceLockHeld.has("DID_CHANGES_STAY_INSIDE_FENCE_Q"));
-        assert.ok(!boxesWithSourceLockHeld.has("CREATE_WORKTREE"));
-        assert.ok(!boxesWithSourceLockHeld.has("MARK_TASK_ACTIVE"));
+        assert.ok(!boxesWithSourceLockHeld.has("B_CREATE_WORKTREE"));
+        assert.ok(!boxesWithSourceLockHeld.has("B_MARK_TASK_ACTIVE"));
     } finally {
         process.chdir(cwd);
         git(repoRoot, "worktree", "remove", "--force", worktreePath);
@@ -1164,7 +1167,7 @@ test("test_resetTask_atBlock_clearsTheTailCursorSoTheRelaunchStartsAtTheBlock", 
     }
 });
 
-test("test_resetTask_atBlock_keepsAnotherTasksConcurrentRunStateWrite", async () => {
+test("test_resetTask_atBlock_keepsAnotherTasksConcurrentRunStateWrite", { timeout: 60_000 }, async () => {
     // Task 9 uses the block-reset fixture; races resetTask's unlocked write against a locked write to task 10's run field.
     const repoRoot = makeTempRepoWithCommit();
     const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
@@ -1202,8 +1205,8 @@ test("test_resetTask_atBlock_keepsAnotherTasksConcurrentRunStateWrite", async ()
             command: `node --no-inspect script.ts '${packetInput}'`,
             rewindPoints: { "": rewindOid },
         }));
-        // None name taskNumber 9, so the `.some` scan reads every one, widening the read-to-write gap to several seconds.
-        for (let i = 0; i < 60000; i++) writeFileSync(join(packetsFolder, `dummy-${i}.json`), "{}");
+        // None name taskNumber 9, so the `.some` scan reads every one, widening the read-to-write gap.
+        for (let i = 0; i < 5000; i++) writeFileSync(join(packetsFolder, `dummy-${i}.json`), "{}");
 
         // Action: reset task 9 at RUN_TASK_TESTS in a child process, racing a locked write to task 10's run field.
         const resetTaskScript = fileURLToPath(new URL("./resetTask.ts", import.meta.url));

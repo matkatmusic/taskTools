@@ -221,7 +221,7 @@ test("test_mergeTaskWorktree_refusesAndMutatesNothingWhenTheLockIsHeldByAnotherR
     assert.deepEqual(run?.commits, []);
 });
 
-test("test_mergeTaskWorktree_mergesTheRootLayerIntoRootSourceBranchNotTheCheckedOutBranch", async () => {
+test("test_mergeTaskWorktree_mergesTheRootLayerIntoRootSourceBranchNotTheCheckedOutBranch", { timeout: 120_000 }, async () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
 

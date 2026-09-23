@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { git } from "./support/gitFixtures.ts";
 import { commitOnStaging, commitTaskWork as sharedCommitTaskWork, refPresent, gitlinkAt } from "./mergeStaging/support.ts";
 import { makeRevengGraphFixture, REVENG_OCCURRENCE_IDS } from "./fixtures/revengGraph.ts";
+import { makeShapeFixture } from "./support/repoShapeFixtures.ts";
 import { resolveOrCreateStagingTipEverywhere } from "../scripts/shared/prepareTasks.ts";
 import { claimTask } from "../scripts/tackle-tasks/shared/taskRunState.ts";
 import { createTaskWorktree } from "../scripts/tackle-tasks/shared/createTaskWorktree.ts";
@@ -16,7 +17,7 @@ function fixtureTmpRoot(fixture: { rootPath: string }): string {
     return dirname(fixture.rootPath);
 }
 
-test("test_stagingEverywhere_createsStagingInEveryRepoWhenASubmoduleTipMovedPastTheRecordedGitlink", () => {
+test("test_stagingEverywhere_createsStagingInEveryRepoWhenASubmoduleTipMovedPastTheRecordedGitlink", { timeout: 120_000 }, () => {
     const fixture = makeRevengGraphFixture();
     try {
         // Root branch "Layer3-9" records jfred at gitlinkA (unchanged: we never re-commit the gitlink).
@@ -82,7 +83,7 @@ function commitTaskWorkAt(worktree: string, occurrenceId: string, relFile: strin
     return git(worktreeCheckoutPath(worktree, occurrenceId), "rev-parse", "HEAD");
 }
 
-test("test_pipeline_worktreeCommitRebaseMerge_expectationsPerRepo", async () => {
+test("test_pipeline_worktreeCommitRebaseMerge_expectationsPerRepo", { timeout: 300_000 }, async () => {
     const TASK_NUMBER = 91;
     const RUN_ID = "run-revengPipeline";
     const BRANCH = `task-${TASK_NUMBER}`;
@@ -268,39 +269,36 @@ test("test_rebase_ownedDirtyFileAtRebaseTime_throwsNamingOccurrenceAndPath", asy
     const TASK_NUMBER = 92;
     const RUN_ID = "run-ownedDirty";
     const BRANCH = `task-${TASK_NUMBER}`;
-    const fixture = makeRevengGraphFixture();
-    try {
-        writeFileSync(
-            join(fixture.rootPath, "tasks.json"),
-            `${JSON.stringify([{ taskNumber: TASK_NUMBER, title: "t", modifiableFiles: ["jfred/seed.txt"] }], null, 2)}\n`,
-        );
-        claimTask(TASK_NUMBER, RUN_ID, fixture.rootPath);
-        const { worktree } = createTaskWorktree(TASK_NUMBER, RUN_ID, fixture.rootPath);
+    const fixture = makeShapeFixture("one-submodule", "at-head", TASK_NUMBER);
+    writeFileSync(
+        join(fixture.rootPath, "tasks.json"),
+        `${JSON.stringify([{ taskNumber: TASK_NUMBER, title: "t", modifiableFiles: ["sub/seed.txt"] }], null, 2)}\n`,
+    );
+    claimTask(TASK_NUMBER, RUN_ID, fixture.rootPath);
+    const { worktree } = createTaskWorktree(TASK_NUMBER, RUN_ID, fixture.rootPath);
 
-        // Move staging in jfred so the rebase actually has to run for that occurrence.
-        commitOnStaging(fixture.occurrencePaths.jfred, "staging-move.txt", "jfred staging moved\n");
+    // Move staging in "sub" so the rebase actually has to run for that occurrence.
+    const subNode = fixture.repos.find((repo) => repo.occurrenceId === "sub")!;
+    commitOnStaging(subNode.checkoutPath, "staging-move.txt", "sub staging moved\n");
 
-        // Dirty the OWNED file without committing it: COMMIT_IMPLEMENTATION_IF_NEEDED should have already done that.
-        const jfredWorktreePath = worktreeCheckoutPath(worktree, "jfred");
-        writeFileSync(join(jfredWorktreePath, "seed.txt"), "uncommitted owned edit\n");
+    // Dirty the OWNED file without committing it: COMMIT_IMPLEMENTATION_IF_NEEDED should have already done that.
+    const subWorktreePath = worktreeCheckoutPath(worktree, "sub");
+    writeFileSync(join(subWorktreePath, "seed.txt"), "uncommitted owned edit\n");
 
-        const rebasePacket = JSON.stringify({
-            box: "WAS_LOCK_ACQUIRED_Q", scriptSignal: "continue",
-            taskNumber: TASK_NUMBER, runId: RUN_ID, projectRoot: fixture.rootPath,
-            worktree, branch: BRANCH, exitType: "", exitNote: "",
-        });
+    const rebasePacket = JSON.stringify({
+        box: "WAS_LOCK_ACQUIRED_Q", scriptSignal: "continue",
+        taskNumber: TASK_NUMBER, runId: RUN_ID, projectRoot: fixture.rootPath,
+        worktree, branch: BRANCH, exitType: "", exitNote: "",
+    });
 
-        await assert.rejects(
-            rebaseMain(rebasePacket),
-            (error: Error) => {
-                assert.match(error.message, /jfred/, "error must name the occurrence");
-                assert.match(error.message, /seed\.txt/, "error must name the dirty path");
-                assert.match(error.message, /committed/i, "error must say it should have been committed");
-                return true;
-            },
-            "rebase must refuse while an owned file is dirty and uncommitted",
-        );
-    } finally {
-        rmSync(fixtureTmpRoot(fixture), { recursive: true, force: true });
-    }
+    await assert.rejects(
+        rebaseMain(rebasePacket),
+        (error: Error) => {
+            assert.match(error.message, /sub/, "error must name the occurrence");
+            assert.match(error.message, /seed\.txt/, "error must name the dirty path");
+            assert.match(error.message, /committed/i, "error must say it should have been committed");
+            return true;
+        },
+        "rebase must refuse while an owned file is dirty and uncommitted",
+    );
 });

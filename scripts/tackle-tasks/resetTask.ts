@@ -1,4 +1,4 @@
-import { execSync, spawnSync } from "node:child_process";
+import { execFileSync, execSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -411,7 +411,9 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     // }
 
     // A worktree re-made by plain `git worktree add` has empty submodule folders; git would then run in the parent repo.
-    initializeSubmodulesInWorktree(worktreePath);
+    const hasEmptySubmodule = execFileSync("git", ["-C", worktreePath, "submodule", "status", "--recursive"], { encoding: "utf8" }).split("\n").some((line) => line.startsWith("-"));
+    if (hasEmptySubmodule)
+      initializeSubmodulesInWorktree(worktreePath);
     // Deepest submodule path first, root ("") last: task-N is already checked out at the root.
     for (const [occurrenceId, oid] of Object.entries(rewindPoints).sort(([a], [b]) => b.length - a.length)) {
       const path = occurrenceId === "" ? worktreePath : join(worktreePath, occurrenceId);
@@ -498,16 +500,46 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     }
     // A stale exit-tail cursor outranks the checkpoint on relaunch; clear it so the reset block runs.
     writeTailCursor(taskNumber, runId, null, repoRoot);
-    const cleared = Object.entries(scope).filter(([, value]) => value === true).map(([key]) => key);
+    const cleared: string[] = [];
+    for (const [key, value] of Object.entries(scope)) {
+      const isCleared = value === true;
+      if (isCleared) {
+        cleared.push(key);
+      }
+    }
     lines.push(`cleared: ${cleared.length > 0 ? cleared.join(", ") : "nothing"}`);
 
     // Same three calls as SkillBodyEmitter.ts ensureTaskWorkflowPair, so a resume walks the current diagrams.
     const diagramFolderSetting = resolveDiagramFolderSetting(repoRoot, false, "");
     const workflowFile = join(dirname(stepsConfigPath), "workflow.js");
-    generateSteps(diagramFolderSetting.diagramFolder, diagramFolderSetting.stepsRoot, stepsConfigPath, diagramFolderSetting.allowStubs);
-    resolveAgentOptions(stepsConfigPath, tasksFile, taskNumber);
-    generateWorkflow(workflowFile, taskNumber, stepsConfigPath);
-    lines.push(`task ${taskNumber} steps.json and workflow.js regenerated`);
+    const generatorInputFiles: string[] = [];
+    for (const candidate of [join(repoRoot, ".taskTools/settings.json"), tasksFile]) {
+      const candidateExists = existsSync(candidate);
+      if (candidateExists) {
+        generatorInputFiles.push(candidate);
+      }
+    }
+    const diagramFolderInputPaths: string[] = [];
+    for (const entry of readdirSync(diagramFolderSetting.diagramFolder, { recursive: true })) {
+      const entryPath = join(diagramFolderSetting.diagramFolder, entry.toString());
+      const isFile = statSync(entryPath).isFile();
+      if (isFile) {
+        diagramFolderInputPaths.push(entryPath);
+      }
+    }
+    const generatorInputPaths = [...generatorInputFiles, ...diagramFolderInputPaths];
+    const newestInputMtimeMs = Math.max(...generatorInputPaths.map((path) => statSync(path).mtimeMs));
+    const generatedFilesAreFresh = existsSync(stepsConfigPath) && existsSync(workflowFile)
+        && statSync(stepsConfigPath).mtimeMs >= newestInputMtimeMs && statSync(workflowFile).mtimeMs >= newestInputMtimeMs;
+    if (generatedFilesAreFresh) {
+      lines.push(`task ${taskNumber} steps.json and workflow.js already match the diagrams`);
+    }
+    else {
+      generateSteps(diagramFolderSetting.diagramFolder, diagramFolderSetting.stepsRoot, stepsConfigPath, diagramFolderSetting.allowStubs);
+      resolveAgentOptions(stepsConfigPath, tasksFile, taskNumber);
+      generateWorkflow(workflowFile, taskNumber, stepsConfigPath);
+      lines.push(`task ${taskNumber} steps.json and workflow.js regenerated`);
+    }
   }
   // Last: steps.json here was read at the top; the block path above regenerates it from the current diagrams.
   if (block === "")

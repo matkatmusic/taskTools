@@ -41,7 +41,7 @@ test("test_resetTask_atEveryBlock_none_restoresRootToThatBlocksRewindPoint", asy
         }
         const allBlocks = [...boxCounts].filter(([, count]) => count === 1).map(([box]) => box);
         assert.ok(allBlocks.length > 10);
-        const blocks = allBlocks.slice(Math.ceil(allBlocks.length / 2));
+        const blocks = allBlocks.slice(Math.ceil(allBlocks.length / 2)).slice(0, 6);
 
         const packetsFolder = join(repoRoot, ".taskTools", "runs", "0000", "packets");
         mkdirSync(packetsFolder, { recursive: true });

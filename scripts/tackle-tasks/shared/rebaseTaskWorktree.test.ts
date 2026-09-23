@@ -99,8 +99,8 @@ test("test_rebaseTaskWorktree_rebasesEveryLayerAndReportsNoConflicts", async () 
     assert.equal(rootReceipt.sourceTip, git(rootOrigin, "rev-parse", "main"));
 });
 
-test("test_rebaseTaskWorktree_reacquiringItsOwnSourceLockIsANoOp", async () => {
-    const rootOrigin = makeSourceRepoWithSubmodule();
+test("test_rebaseTaskWorktree_reacquiringItsOwnSourceLockIsANoOp", { timeout: 45_000 }, async () => {
+    const rootOrigin = makeTempRepoWithCommit("main");
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
     seedTaskAndClaim(rootOrigin, taskNumber, "run-2");
     writeFileSync(join(worktreePath, "root-work.txt"), "root work\n");

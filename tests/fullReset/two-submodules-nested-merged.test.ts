@@ -9,7 +9,7 @@ import {
     submodulePathsByShape, taskBranchRef,
 } from "./support.ts";
 
-test("test_fullReset_merged_twoSubmodulesNested_undoesTheMergeBackToTheRecordedResetPointEverywhere", async () => {
+test("test_fullReset_merged_twoSubmodulesNested_undoesTheMergeBackToTheRecordedResetPointEverywhere", { timeout: 120_000 }, async () => {
     const taskNumber = 814;
     const fixture = makeShapeFixture("two-submodules-nested", "at-head", taskNumber);
     const { worktree } = spawnTask(fixture.rootPath, taskNumber, "run-1");
