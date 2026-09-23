@@ -15,7 +15,7 @@ export type ConflictFixReceipt = {
 const readFileArgs = (paths: string[]) => [...new Set(paths)].map((path) => `"${path}"`).join(" ");
 
 // Derived here, never accepted from the caller, who could otherwise supply an empty list.
-function conflictedPaths(checkoutPath: string): string[] {
+export function conflictedPaths(checkoutPath: string): string[] {
     const output = execFileSync("git", ["-C", checkoutPath, "diff", "--name-only", "--diff-filter=U", "-z"], { encoding: "utf8" });
     return output.split("\0").filter((line) => line.length > 0);
 }

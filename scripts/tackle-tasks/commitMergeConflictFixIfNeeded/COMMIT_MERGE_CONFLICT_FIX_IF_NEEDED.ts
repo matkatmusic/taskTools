@@ -13,7 +13,7 @@ function baseBranch(projectRoot: string): string {
     return "staging";
 }
 
-const CONFLICT_MARKER_LINE = /^(<{7}|={7}|>{7})/m;
+export const CONFLICT_MARKER_LINE = /^(<{7}|={7}|>{7})/m;
 
 export function main(input: string): CommitMergeConflictFixIfNeededPacket {
     // The prompt block before this one leaves its own next in the packet; one exit path, so drop it.
