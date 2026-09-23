@@ -79,7 +79,7 @@ function prepareResumedWorktree(repoPath: string): void {
   const worktree = join(resolveTaskWorktreeConventionDirectory(repoPath), "task-3");
   git(repoPath, "worktree", "add", "-q", "-b", "task-3", worktree, "staging");
   const notesFile = join(worktree, "plans", "implementation-notes-3.md");
-  mkdirSync(join(worktree, "plans"));
+  mkdirSync(join(worktree, "plans"), { recursive: true });
   writeFileSync(notesFile, "# task 3 notes\n");
   writeFileSync(join(worktree, "stray.txt"), "stray edit\n");
   // Staged, because the fence check reads `git diff HEAD`, which skips untracked files.
@@ -119,9 +119,11 @@ const PREPARE_BY_CASE: Record<string, (repoPath: string) => void> = {
 const [command, caseNumber, repoPath] = process.argv.slice(2);
 if (command === "build") {
   console.log(build());
-} else if (command === "prepare") {
+}
+else if (command === "prepare") {
   PREPARE_BY_CASE[caseNumber!]!(repoPath!);
   console.log(repoPath);
-} else {
+}
+else {
   throw new Error(`usage: build | prepare <1-4> <repoPath>; got "${process.argv.slice(2).join(" ")}"`);
 }

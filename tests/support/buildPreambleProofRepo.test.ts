@@ -2,7 +2,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveTaskWorktreeConventionDirectory } from "../../scripts/shared/prepareTasks.ts";
@@ -87,6 +87,12 @@ test("test_buildPreambleProofRepo_prepare2_leavesADivergedConflict", () => {
 test("test_buildPreambleProofRepo_prepare3_fakesAResumedWorktree", () => {
   // Setup: a fresh build.
   const repoPath = buildRepo();
+  // Setup: earlier merged runs leave plans/ on staging.
+  ensureStagingWorktree(repoPath, "staging");
+  mkdirSync(join(stagingWorktreePath(repoPath), "plans"));
+  writeFileSync(join(stagingWorktreePath(repoPath), "plans", "implementation-notes-1.md"), "# task 1 notes\n");
+  git(stagingWorktreePath(repoPath), "add", "plans");
+  git(stagingWorktreePath(repoPath), "commit", "-q", "-m", "earlier run notes");
 
   // Test action: set up case 3.
   runScript("prepare", "3", repoPath);
