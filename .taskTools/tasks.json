@@ -342,35 +342,6 @@
     "difficulty": 4
   },
   {
-    "taskNumber": 261,
-    "version": "d8a61f692e9fb54492a0747e77e288784bdc51dd",
-    "title": "[launch 22] Goal: a tackle-tasks launch reaches planning alone",
-    "userDescription": "22. Goal: a tackle-tasks launch reaches the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet.\n\nUser ruling (2026-09-18): a Goal item checks the literal goal sentence written in its own spec item, not \"the items before it hold\". [launch 22]'s goal sentence, copied verbatim from this item, is \"a tackle-tasks launch reaches the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet.\" Each goal line is a by-hand check of that sentence, with the exact command and the exact expected output, for each of the four cases [launch 20]'s fixture builds and [launch 21] first proved. Still check-only: no code change, `hasTests` is false, `tests` is the empty string.",
-    "chainGoal": [
-      "A tackle-tasks launch reaches the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet. The chain is [launch 1] to [launch 22] from specs/launch-reaches-planning-alone.md."
-    ],
-    "goal": [
-      "- Case 1: `bun tests/support/buildPreambleProofRepo.ts build`, then `prepare 1`, then `/tackle-tasks 1` in the fixture repo. A launch reaches the planning stage on its own when staging is behind: the pasted `.taskTools/runs/<stamp>/task-1-run-log.json` lists a `pipeline-planTheTask.mmd` block and no `FAILURES_EXIT` block.",
-      "- Case 2: a fresh `build`, then `prepare 2`, then `/tackle-tasks 2` in the fixture repo. A launch reaches the planning stage on its own through a conflicted catch-up: the pasted run log lists `B_FIX_CATCH_UP_CONFLICTS`, then a `pipeline-planTheTask.mmd` block, and no `FAILURES_EXIT` block.",
-      "- Case 3: a fresh `build`, then `prepare 3`, then `/tackle-tasks 3` in the fixture repo. A launch reaches the planning stage on its own when a task file is outside the fence: the pasted run log lists `B_AMEND_TASK_FILE_LIST` and a `pipeline-planTheTask.mmd` block with no `FAILURES_EXIT` block, and the fixture repo's `.taskTools/tasks.json` lists `stray.txt` on task 3 afterward.",
-      "- Case 4: a fresh `build`, then `prepare 4`, then `/tackle-tasks 4` in the fixture repo. A launch reaches the planning stage on its own when a listed file does not exist yet: the pasted run log lists `B_ADD_MISSING_FILES_TO_CREATES_FILES` and a `pipeline-planTheTask.mmd` block with no `FAILURES_EXIT` block, and task 4's `createsFiles` holds `e.txt` afterward."
-    ],
-    "notInScope": [
-      "- Any code change: this is a check-only task, like [launch 2], [launch 3], and every other Goal item in this spec.",
-      "- Confirming the full test suite or the automated acceptance-test walk: this item checks only the literal goal sentence in its own spec item, by hand, for the four cases, not the rest of the chain."
-    ],
-    "problemSolvedByTask": "Check-only item: the check proves the chain's own literal goal sentence, a tackle-tasks launch reaching the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet, actually holds, by running each of the four cases by hand and reading the exact expected output.",
-    "description": "This is a check-only task with no code change. It checks the literal goal sentence from its own spec item by hand, for each of the four cases the fixture in [launch 20] builds: staging behind, a diverged catch-up conflict, a resumed worktree with a stray edit outside the fence, and a missing listed file. For each case the reviewer runs a fresh `build`, then `prepare N`, then a real tackle-tasks launch on task N, and reads the resulting run log against an exact expected block list. A launch reaching the planning stage on its own means the pasted run log lists a `pipeline-planTheTask.mmd` block and never the `FAILURES_EXIT` block, with the case's own distinguishing block, `B_FIX_CATCH_UP_CONFLICTS`, `B_AMEND_TASK_FILE_LIST`, or `B_ADD_MISSING_FILES_TO_CREATES_FILES`, present where the case calls for it.",
-    "modifiableFiles": [],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "schemaVersion": "1.0.1",
-    "hasTests": false,
-    "tests": "",
-    "difficulty": 1
-  },
-  {
     "taskNumber": 262,
     "version": "dae592c153bafd52941bd42811cc3cb5aa8cb60c",
     "title": "Test fixtures must not register worktrees in the main repo or leak CREATE_WORKTREE-root-* dirs",
