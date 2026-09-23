@@ -6,10 +6,10 @@ import { addTaskCreatesFiles } from "../../shared/addTaskCreatesFiles.ts";
 import type { EntryPacket } from "./_packet.ts";
 
 export function main(input: string): EntryPacket {
-    const { next: _next, ...packet } = JSON.parse(input) as EntryPacket & { next?: string };
-    // Each path stays in modifiableFiles: the edit fence is built from that list alone.
-    addTaskCreatesFiles([packet.taskNumber], packet.missingFiles, packet.projectRoot);
-    return { ...packet, box: "B_ADD_MISSING_FILES_TO_CREATES_FILES", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
+  const { next: _next, ...packet } = JSON.parse(input) as EntryPacket & { next?: string };
+  // Each path stays in modifiableFiles: the edit fence is built from that list alone.
+  addTaskCreatesFiles([packet.taskNumber], packet.missingFiles, packet.projectRoot);
+  return { ...packet, box: "B_ADD_MISSING_FILES_TO_CREATES_FILES", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.
