@@ -13,12 +13,12 @@ function packet(worktree: string, groupId: number): string {
     });
 }
 
-test("test_IS_WORKTREE_SAFE_TO_USE_Q_choosesIsPreviousRunResumableWhenTheWorktreeIsSafe", () => {
+test("test_IS_WORKTREE_SAFE_TO_USE_Q_choosesResumePreviousRunIfPossibleWhenTheWorktreeIsSafe", () => {
     const { rootOrigin } = makeLayeredSubmoduleFixture();
     const groupId = 900_201;
     const worktreePath = makeLinkedWorktree(rootOrigin, groupId);
     const output = main(packet(worktreePath, groupId));
-    assert.equal(output.next, "Q_IS_PREVIOUS_RUN_RESUMABLE_Q");
+    assert.equal(output.next, "Q_RESUME_PREVIOUS_RUN_IF_POSSIBLE");
 });
 
 test("test_IS_WORKTREE_SAFE_TO_USE_Q_choosesTakeWorktreeLeaseBeforeResetWhenHeadIsOnTheWrongBranch", () => {

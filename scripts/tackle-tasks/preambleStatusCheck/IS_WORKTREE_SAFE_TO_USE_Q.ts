@@ -12,7 +12,7 @@ export function main(input: string): EntryPacket & { next: string } {
         ...packet,
         box: "Q_IS_WORKTREE_SAFE_TO_USE_Q",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
-        next: safe ? "Q_IS_PREVIOUS_RUN_RESUMABLE_Q" : "B_TAKE_WORKTREE_LEASE_BEFORE_RESET",
+        next: safe ? "Q_RESUME_PREVIOUS_RUN_IF_POSSIBLE" : "B_TAKE_WORKTREE_LEASE_BEFORE_RESET",
     };
 }
 

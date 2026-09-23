@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isTaskRunResumable } from "./isTaskRunResumable.ts";
+import { establishTaskRunLease, findPreviousRunNotesFile } from "./isTaskRunResumable.ts";
 import type { TaskRunRecord } from "./taskRunState.ts";
 
 function endedRun(overrides: Partial<TaskRunRecord> = {}): TaskRunRecord {
@@ -41,7 +41,8 @@ test("test_isTaskRunResumable_returnsFalseWhenTheNotesFileIsRecordedButMissingOn
     const { root } = makeFixture(previousRun, worktreePath);
 
     // Test action + verification: ownership is still established even though notes are missing.
-    const result = isTaskRunResumable(1, worktreePath, "run-new", root);
+    const leaseEstablished = establishTaskRunLease(1, "run-new", root);
+    const result = findPreviousRunNotesFile(1, worktreePath, root, leaseEstablished);
     assert.deepEqual(result, { resumable: false, implementationNotesFile: null, leaseEstablished: true });
     const lease = JSON.parse(readFileSync(`${worktreePath}.lease`, "utf8"));
     assert.equal(lease.runId, "run-new");
@@ -57,7 +58,8 @@ test("test_isTaskRunResumable_adoptsThePreviousRunsLease", () => {
     const { root } = makeFixture(previousRun, worktreePath);
 
     // Test action: check resumability.
-    const result = isTaskRunResumable(1, worktreePath, "run-new", root);
+    const leaseEstablished = establishTaskRunLease(1, "run-new", root);
+    const result = findPreviousRunNotesFile(1, worktreePath, root, leaseEstablished);
 
     // Verification: resumable, notes file reported, and the lease is now adopted by the new run.
     assert.deepEqual(result, {
@@ -78,7 +80,8 @@ test("test_isTaskRunResumable_returnsFalseWhenNoPreviousRunEverEnded", () => {
     }], null, 2));
 
     // Test action + verification: no notes means not resumable, but ownership is still established.
-    const result = isTaskRunResumable(1, worktreePath, "run-new", root);
+    const leaseEstablished = establishTaskRunLease(1, "run-new", root);
+    const result = findPreviousRunNotesFile(1, worktreePath, root, leaseEstablished);
     assert.deepEqual(result, { resumable: false, implementationNotesFile: null, leaseEstablished: true });
     const lease = JSON.parse(readFileSync(`${worktreePath}.lease`, "utf8"));
     assert.equal(lease.runId, "run-new");
@@ -95,7 +98,8 @@ test("test_isTaskRunResumable_returnsFalseForANotesFileOutsideTheWorktreeByAbsol
     const { root } = makeFixture(previousRun, worktreePath);
 
     // Test action + verification: not resumable, but the ended owner's lease is still adopted.
-    const result = isTaskRunResumable(1, worktreePath, "run-new", root);
+    const leaseEstablished = establishTaskRunLease(1, "run-new", root);
+    const result = findPreviousRunNotesFile(1, worktreePath, root, leaseEstablished);
     assert.deepEqual(result, { resumable: false, implementationNotesFile: null, leaseEstablished: true });
     const lease = JSON.parse(readFileSync(`${worktreePath}.lease`, "utf8"));
     assert.equal(lease.runId, "run-new");
@@ -111,7 +115,8 @@ test("test_isTaskRunResumable_returnsFalseForANotesFileThatEscapesTheWorktreeWit
     const { root } = makeFixture(previousRun, worktreePath);
 
     // Test action + verification: not resumable, but the ended owner's lease is still adopted.
-    const result = isTaskRunResumable(1, worktreePath, "run-new", root);
+    const leaseEstablished = establishTaskRunLease(1, "run-new", root);
+    const result = findPreviousRunNotesFile(1, worktreePath, root, leaseEstablished);
     assert.deepEqual(result, { resumable: false, implementationNotesFile: null, leaseEstablished: true });
     const lease = JSON.parse(readFileSync(`${worktreePath}.lease`, "utf8"));
     assert.equal(lease.runId, "run-new");
@@ -130,7 +135,8 @@ test("test_isTaskRunResumable_returnsFalseForANotesFileThatEscapesTheWorktreeThr
     const { root } = makeFixture(previousRun, worktreePath);
 
     // Test action + verification: not resumable, but the ended owner's lease is still adopted.
-    const result = isTaskRunResumable(1, worktreePath, "run-new", root);
+    const leaseEstablished = establishTaskRunLease(1, "run-new", root);
+    const result = findPreviousRunNotesFile(1, worktreePath, root, leaseEstablished);
     assert.deepEqual(result, { resumable: false, implementationNotesFile: null, leaseEstablished: true });
     const lease = JSON.parse(readFileSync(`${worktreePath}.lease`, "utf8"));
     assert.equal(lease.runId, "run-new");
@@ -146,7 +152,8 @@ test("test_isTaskRunResumable_acquiresAnAbsentLeaseForTheCurrentRun", () => {
     const { root } = makeFixture(previousRun, worktreePath, "run-old");
 
     // Test action: check resumability with no lease file on disk.
-    const result = isTaskRunResumable(1, worktreePath, "run-new", root);
+    const leaseEstablished = establishTaskRunLease(1, "run-new", root);
+    const result = findPreviousRunNotesFile(1, worktreePath, root, leaseEstablished);
 
     // Verification: resumable, and a fresh lease was acquired for the current run.
     assert.deepEqual(result, {
@@ -167,7 +174,8 @@ test("test_isTaskRunResumable_returnsFalseWhenADifferentPhysicalOwnerHoldsTheLea
     const { root } = makeFixture(previousRun, worktreePath, "run-old");
 
     // Test action + verification: not resumable, and the other run's lease is preserved untouched.
-    const result = isTaskRunResumable(1, worktreePath, "run-new", root);
+    const leaseEstablished = establishTaskRunLease(1, "run-new", root);
+    const result = findPreviousRunNotesFile(1, worktreePath, root, leaseEstablished);
     assert.deepEqual(result, { resumable: false, implementationNotesFile: null, leaseEstablished: false });
     const lease = JSON.parse(readFileSync(`${worktreePath}.lease`, "utf8"));
     assert.equal(lease.runId, "run-someone-else");
@@ -182,7 +190,8 @@ test("test_isTaskRunResumable_resumesAnEndedRunThatRecordedNoWork", () => {
     const { root } = makeFixture(previousRun, worktreePath, "run-old");
 
     // Test action: check resumability.
-    const result = isTaskRunResumable(1, worktreePath, "run-new", root);
+    const leaseEstablished = establishTaskRunLease(1, "run-new", root);
+    const result = findPreviousRunNotesFile(1, worktreePath, root, leaseEstablished);
 
     // Verification: resumable (the run recorded no work to lose); ownership is established and
     // both lease records — the physical lease file and task.run.leaseRunId — now name the new run.
@@ -201,7 +210,8 @@ test("test_isTaskRunResumable_refusesWhenALiveRunOwnsTheLease", () => {
     const { root } = makeFixture(previousRun, worktreePath, "run-old");
 
     // Test action: check resumability.
-    const result = isTaskRunResumable(1, worktreePath, "run-new", root);
+    const leaseEstablished = establishTaskRunLease(1, "run-new", root);
+    const result = findPreviousRunNotesFile(1, worktreePath, root, leaseEstablished);
 
     // Verification: ownership refused, and neither lease record changed.
     assert.deepEqual(result, { resumable: false, implementationNotesFile: null, leaseEstablished: false });

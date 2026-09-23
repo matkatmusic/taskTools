@@ -766,16 +766,6 @@
             ]
         },
         {
-            "box": "Q_IS_PREVIOUS_RUN_RESUMABLE_Q",
-            "script": "scripts/tackle-tasks/preambleStatusCheck/IS_PREVIOUS_RUN_RESUMABLE_Q.ts",
-            "template": "scripts/tackle-tasks/preambleStatusCheck/IS_PREVIOUS_RUN_RESUMABLE_Q.template.json",
-            "producesPrompt": false,
-            "next": [
-                "Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING",
-                "Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING"
-            ]
-        },
-        {
             "box": "Q_IS_TASK_ACTIVE_Q",
             "script": "scripts/tackle-tasks/preambleStatusCheck/IS_TASK_ACTIVE_Q.ts",
             "template": "scripts/tackle-tasks/preambleStatusCheck/IS_TASK_ACTIVE_Q.template.json",
@@ -802,7 +792,7 @@
             "producesPrompt": false,
             "next": [
                 "B_TAKE_WORKTREE_LEASE_BEFORE_RESET",
-                "Q_IS_PREVIOUS_RUN_RESUMABLE_Q"
+                "Q_RESUME_PREVIOUS_RUN_IF_POSSIBLE"
             ]
         },
         {
@@ -826,6 +816,16 @@
             ]
         },
         {
+            "box": "Q_PREVIOUS_RUN_LEFT_NOTES",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/PREVIOUS_RUN_LEFT_NOTES.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/PREVIOUS_RUN_LEFT_NOTES.template.json",
+            "producesPrompt": false,
+            "next": [
+                "Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING",
+                "Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING"
+            ]
+        },
+        {
             "box": "Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING",
             "script": "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts",
             "template": "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.template.json",
@@ -833,6 +833,16 @@
             "next": [
                 "Q_DOES_FENCE_COVER_WORKTREE_Q",
                 "B_FIX_RESUMED_REBASE_CONFLICTS"
+            ]
+        },
+        {
+            "box": "Q_RESUME_PREVIOUS_RUN_IF_POSSIBLE",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/RESUME_PREVIOUS_RUN_IF_POSSIBLE.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/RESUME_PREVIOUS_RUN_IF_POSSIBLE.template.json",
+            "producesPrompt": false,
+            "next": [
+                "Q_PREVIOUS_RUN_LEFT_NOTES",
+                "pipeline-failuresExit.mmd::FAILURES_EXIT"
             ]
         },
         {
