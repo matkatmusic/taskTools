@@ -10440,5 +10440,46 @@
     "completionDate": "2026-09-22",
     "commitHashes": [],
     "closureNote": ""
+  },
+  {
+    "taskNumber": 254,
+    "version": "28b797d5a25ba5ce0af51e8beb01ecae56c9217d",
+    "title": "[launch 15] Fill in CONTINUE_RESUMED_REBASE to commit the fix and continue the resumed-worktree rebase",
+    "userDescription": "15. The `CONTINUE_RESUMED_REBASE` block commits the fix and continues the rebase.\n    WHY: a rebase has many layers, and each layer can have a conflict.\n    HOW: fill in the stub. Reuse as much code as possible from the `COMMIT_..._IF_NEEDED` block scripts, as in step 12: the marker check from `COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.ts:16,30-32`, `advanceTaskRebase` from `CONTINUE_REBASE.ts:18-26`, and the lock release from `IS_REBASE_FINISHED_Q.ts:15-25`. NO (next layer has a conflict): keep the lock, go back to `FIX_RESUMED_REBASE_CONFLICTS`. There is no try limit. YES (rebase finished): release the lock, go to `DOES_FENCE_COVER_WORKTREE_Q`.",
+    "chainGoal": [
+      "A tackle-tasks launch reaches the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet. The chain is [launch 1] to [launch 22] from specs/launch-reaches-planning-alone.md."
+    ],
+    "goal": [
+      "- `node --test scripts/tackle-tasks/preambleStatusCheck/CONTINUE_RESUMED_REBASE.test.ts` passes.",
+      "- Given `additionalData.resolved: true` and a rebase that then finishes clean, Q_CONTINUE_RESUMED_REBASE returns `next: \"Q_DOES_FENCE_COVER_WORKTREE_Q\"` and the source-repo lock is released.",
+      "- Given a rebase that hits a fresh conflict on the next layer, Q_CONTINUE_RESUMED_REBASE returns `next: \"B_FIX_RESUMED_REBASE_CONFLICTS\"` and the source-repo lock is still held.",
+      "- There is no try-count limit: `rg -n \"try\" scripts/tackle-tasks/preambleStatusCheck/CONTINUE_RESUMED_REBASE.ts` finds no counter logic."
+    ],
+    "notInScope": [
+      "- [launch 14]'s FIX_RESUMED_REBASE_CONFLICTS prompt fill-in is out of scope; this task only fires once an agent has already answered that prompt.",
+      "- [launch 13]'s split of IS_PREVIOUS_RUN_RESUMABLE_Q is out of scope.",
+      "- The 2-try stop at ARE_2_CONFLICT_FIXES_DONE_Q for the rebase that runs after implementation is untouched.",
+      "- [launch 18]'s tests/tackleTasksAcceptance.test.ts walk additions are out of scope."
+    ],
+    "problemSolvedByTask": "A rebase has many layers, and each layer can conflict on its own. Once an agent fixes one layer's conflict, the pipeline needs a way to commit that fix and keep advancing through whatever layer comes next, looping back to the agent again if a fresh conflict appears, with no cap on how many times.",
+    "description": "CONTINUE_RESUMED_REBASE.ts already exists as a generator-written stub that throws, at scripts/tackle-tasks/preambleStatusCheck/CONTINUE_RESUMED_REBASE.ts, stubbed by the same earlier chain task that installs the new preamble. This one decision block folds together what the merge-time rebase splits across three: COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.ts's conflict-marker check and staging (git add) of the resolved files, CONTINUE_REBASE.ts's call into advanceTaskRebase to continue the stopped layer, and IS_REBASE_FINISHED_Q.ts's release of the source-repo lock once every layer is clean. On a fresh conflict in the next layer, it keeps the lock and returns next: B_FIX_RESUMED_REBASE_CONFLICTS, looping back with no try limit, exactly as the merge-time ARE_2_CONFLICT_FIXES_DONE_Q loop does today. On a finished rebase, it releases the source-repo lock and returns next: Q_DOES_FENCE_COVER_WORKTREE_Q, which reads only base packet fields and needs no change of its own. It can reuse REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts's exported RebaseResumedPacket type, extended with the agent-answer fields the FIX_RESUMED_REBASE_CONFLICTS prompt's answer carries. Like [launch 14], exercising this against a real mid-rebase conflict likely means extending preambleStatusCheck/fixtures/setup.sh beyond its current tasks.json-only fixture.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/preambleStatusCheck/CONTINUE_RESUMED_REBASE.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/CONTINUE_RESUMED_REBASE.template.json",
+      "scripts/tackle-tasks/preambleStatusCheck/fixtures/setup.sh"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "createsFiles": [
+      "scripts/tackle-tasks/preambleStatusCheck/CONTINUE_RESUMED_REBASE.test.ts"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "New test scripts/tackle-tasks/preambleStatusCheck/CONTINUE_RESUMED_REBASE.test.ts: test_Q_CONTINUE_RESUMED_REBASE_finishesAndReleasesTheLock -- build a fixture checkout stopped on one conflicted commit, resolve the marker by hand, call main() with additionalData: { resolved: true, unresolvedPaths: [] } and the matching stoppedCheckoutPath/conflictedFilePaths, where continuing the rebase finishes it cleanly; assert next: \"Q_DOES_FENCE_COVER_WORKTREE_Q\", scriptSignal: \"continue\", and that readSourceRepoLock on the project root returns null afterward. test_Q_CONTINUE_RESUMED_REBASE_loopsBackOnANewConflict -- build a fixture where continuing the resolved layer's rebase immediately hits a conflict in the next commit; call main() with the same additionalData.resolved: true; assert next: \"B_FIX_RESUMED_REBASE_CONFLICTS\" and that readSourceRepoLock on the project root still names this run's owner. test_Q_CONTINUE_RESUMED_REBASE_throwsWhenAMarkerRemains -- call main() with additionalData: { resolved: true, unresolvedPaths: [] } while the file at stoppedCheckoutPath still contains a <<<<<<< marker line; assert it throws with a message containing \"still hold a conflict marker\".",
+    "difficulty": 6,
+    "completionDate": "2026-09-22",
+    "commitHashes": [],
+    "closureNote": ""
   }
 ]
