@@ -10304,5 +10304,46 @@
       "6dbe2fe2d39fab3fce2135795be568aa8c296178"
     ],
     "closureNote": "FIX_CATCH_UP_CONFLICTS.ts fills in the block: refreshes the catch-up source-repo lock, then writes the shared fixConflictsPrompt to the catch-up merge worktree; targeted tests and the stepTemplates edge tests pass"
+  },
+  {
+    "taskNumber": 251,
+    "version": "d8025d56a29539a1676fbe23a85b046a1fa01c75",
+    "title": "[launch 12] The COMMIT_CATCH_UP_MERGE block commits the fixed merge, moves staging, and removes the merge worktree",
+    "userDescription": "12. The `COMMIT_CATCH_UP_MERGE` block commits the fixed merge, moves `staging`, and removes the merge worktree.\n    WHY: the agent only edits files. A script must finish the merge so the result is checkable.\n    HOW: fill in the stub. Reuse as much code as possible from the `COMMIT_..._IF_NEEDED` block scripts, first of all `COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.ts` (its marker check is at `:16,30-32`). NO (conflict markers remain): go back to `FIX_CATCH_UP_CONFLICTS`. There is no try limit. YES: commit, move `staging`, remove the worktree, and go back to `CATCH_UP_STAGING`, which does the next repository or releases the lock.",
+    "chainGoal": [
+      "A tackle-tasks launch reaches the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet. The chain is [launch 1] to [launch 22] from specs/launch-reaches-planning-alone.md."
+    ],
+    "goal": [
+      "- `COMMIT_CATCH_UP_MERGE.ts` no longer throws its generator placeholder; it asks git for unmerged files in the `task-N-catchUpMerge` worktree and checks each for a leftover conflict marker line, reusing the `CONFLICT_MARKER_LINE` regex check from `COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.ts`.",
+      "- When a marker remains, `next` is `B_FIX_CATCH_UP_CONFLICTS` and the source-repo lock stays held; there is no retry limit.",
+      "- When no marker remains, it stages and commits the merge, moves `staging` to the new commit, removes the `task-N-catchUpMerge` worktree, and routes `next` to `Q_CATCH_UP_STAGING`.",
+      "- `node --test scripts/tackle-tasks/preambleStatusCheck/COMMIT_CATCH_UP_MERGE.test.ts` passes."
+    ],
+    "notInScope": [
+      "- `FIX_CATCH_UP_CONFLICTS`, the block this one loops back to when a marker remains, is [launch 11].",
+      "- `CATCH_UP_STAGING`, the block this one loops back to on success (it decides the next repository or releases the lock), is [launch 10].",
+      "- The rebase-side commit/continue block, `CONTINUE_RESUMED_REBASE`, is a separate item outside this task's range."
+    ],
+    "problemSolvedByTask": "the agent that fixes a catch-up conflict only edits files; a script has to finish the merge (stage, commit, move `staging`, and clean up the merge worktree) so the result is checkable and the catch-up loop can continue.",
+    "description": "COMMIT_CATCH_UP_MERGE.ts is a generator-written stub in scripts/tackle-tasks/preambleStatusCheck/, filled in with the routing shape the diagram draws: it asks git for unmerged files with `git -C <worktreePath> diff --name-only --diff-filter=U -z`, the same technique `conflictedPaths` in scripts/tackle-tasks/shared/FixConflictsBodyEmitter.ts already uses, and reuses `COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.ts`'s `CONFLICT_MARKER_LINE` regex to check each of those files' contents for a leftover marker line. Unlike `COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.ts`, which trusts a `resolved`/`unresolvedPaths` field an agent's structured answer supplies, this block never receives a file list in its packet (the [launch 7] ruling: no conflict file list exists anywhere), so it always derives the still-unmerged paths from git directly, matching the box's own drawn label \"ask git for unmerged files\". On a remaining marker it keeps the source-repo lock and routes back to `B_FIX_CATCH_UP_CONFLICTS`, with no try-count field and no limit, per the spec's \"There is no try limit\"; re-entering that block re-derives the conflicted list from git itself, so no state needs to travel between attempts. On a clean result it stages the previously-unmerged files with `git add`, finishes the interrupted merge with `git -C <worktreePath> commit --no-edit` (the same no-edit convention `resolveOrCreateStagingTip` already uses to finish its own diverged-merge case in scripts/shared/prepareTasks.ts), moves the `repository`'s `staging` ref to the new commit, and removes the `task-N-catchUpMerge` worktree with `git worktree remove --force` plus `git worktree prune`, then routes to `Q_CATCH_UP_STAGING` so it can catch up the next repository or release the lock. `scripts/shared/prepareTasks.ts`'s own staging-move helper, `moveStagingBranchTo`, is not exported, so this block either reimplements the equivalent `git branch -f staging <commit>` handling inline or calls whatever staging-move helper [launch 7]'s `scripts/shared/mergeHelpers.ts` ends up exporting; that module does not exist in this worktree yet, so its exact export surface could not be verified here.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/preambleStatusCheck/COMMIT_CATCH_UP_MERGE.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/COMMIT_CATCH_UP_MERGE.template.json"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "createsFiles": [
+      "scripts/tackle-tasks/preambleStatusCheck/COMMIT_CATCH_UP_MERGE.test.ts"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "scripts/tackle-tasks/preambleStatusCheck/COMMIT_CATCH_UP_MERGE.test.ts, against a real git fixture built the way scripts/tackle-tasks/commitMergeConflictFixIfNeeded/COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.test.ts builds its `stopRebaseOnConflict` fixture, adapted to a merge instead of a rebase (a `task-N-catchUpMerge` worktree with `git merge staging` left stopped on one conflicting file, `MERGE_HEAD` present): test_commitCatchUpMerge_stagesAndCommitsWhenNoMarkerRemains -- setup: the conflicted file in the merge worktree is rewritten with the conflict resolved and no marker lines, but not yet `git add`-ed, so `git diff --name-only --diff-filter=U` in that worktree still lists it; source-repo lock already held by this run; expected: `main(...)`'s result.next === \"Q_CATCH_UP_STAGING\", `git -C <worktreePath> status --porcelain` is empty afterward, `git -C <repository> rev-parse staging` now equals the new merge commit in the worktree, and the `task-N-catchUpMerge` directory no longer exists (`git -C <repository> worktree list` no longer lists it). test_commitCatchUpMerge_keepsTheLockAndGoesBackToFixWhenAMarkerRemains -- setup: the same stopped-merge fixture, but the conflicting file still contains a `<<<<<<<` marker line; expected: result.next === \"B_FIX_CATCH_UP_CONFLICTS\", the source-repo lock file is still present and still owned by this run, `git -C <worktreePath> status --porcelain` still reports the file unmerged, and the `task-N-catchUpMerge` worktree still exists on disk. test_commitCatchUpMerge_throwsWhenTheSourceLockIsNotHeldByThisRun -- setup: the clean-fix fixture from the first test, but no lock acquired; expected `main(...)` throws matching /source repository lock/.",
+    "difficulty": 6,
+    "completionDate": "2026-09-22",
+    "commitHashes": [
+      "3abe946339664ff14c8d292de07a66c240097d1f"
+    ],
+    "closureNote": "task 251: the COMMIT_CATCH_UP_MERGE block commits the fixed merge, moves staging, and removes the merge worktree"
   }
 ]
