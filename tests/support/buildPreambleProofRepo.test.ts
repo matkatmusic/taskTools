@@ -6,6 +6,7 @@ import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveTaskWorktreeConventionDirectory } from "../../scripts/shared/prepareTasks.ts";
+import { ensureStagingWorktree, stagingWorktreePath } from "../../scripts/tackle-tasks/shared/stagingWorktree.ts";
 import { git } from "./gitFixtures.ts";
 
 const SCRIPT_PATH = fileURLToPath(new URL("./buildPreambleProofRepo.ts", import.meta.url));
@@ -66,6 +67,8 @@ test("test_buildPreambleProofRepo_prepare1_leavesStagingBehind", () => {
 test("test_buildPreambleProofRepo_prepare2_leavesADivergedConflict", () => {
   // Setup: a fresh build.
   const repoPath = buildRepo();
+  // Setup: a real run leaves staging checked out in the awaitingTesting worktree.
+  ensureStagingWorktree(repoPath, "staging");
 
   // Test action: set up case 2.
   runScript("prepare", "2", repoPath);
@@ -74,6 +77,7 @@ test("test_buildPreambleProofRepo_prepare2_leavesADivergedConflict", () => {
   assert.equal(git(repoPath, "rev-list", "--count", "staging..main"), "1");
   assert.equal(git(repoPath, "rev-list", "--count", "main..staging"), "1");
   assert.equal(git(repoPath, "branch", "--show-current"), "main");
+  assert.equal(git(stagingWorktreePath(repoPath), "branch", "--show-current"), "staging");
   const mergeBase = git(repoPath, "merge-base", "main", "staging");
   const mergeOutput = git(repoPath, "merge-tree", mergeBase, "main", "staging");
   assert.match(mergeOutput, /z\.txt/);

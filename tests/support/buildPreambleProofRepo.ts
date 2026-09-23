@@ -2,6 +2,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { resolveTaskWorktreeConventionDirectory } from "../../scripts/shared/prepareTasks.ts";
+import { ensureStagingWorktree, stagingWorktreePath } from "../../scripts/tackle-tasks/shared/stagingWorktree.ts";
 import { git, makeCommittedRepo } from "./gitFixtures.ts";
 
 const TASK_FILES = ["a.txt", "b.txt", "c.txt", "d.txt"];
@@ -58,16 +59,19 @@ function prepareStagingBehind(repoPath: string): void {
   git(repoPath, "commit", "-q", "-m", "main moves past staging");
 }
 
-// Case 2: main and staging each add z.txt with a different line, so the catch-up merge conflicts.
+// Case 2: main and staging each add z.txt with a different line, so the catch-up merge conflicts.  Staging's commit lands in the awaitingTesting worktree, since a real run leaves it checked out there.
 function prepareCatchUpConflict(repoPath: string): void {
+  // Runs before main diverges, so this is a no-op when the caller already set the worktree up.
+  ensureStagingWorktree(repoPath, "staging");
   writeFileSync(join(repoPath, "z.txt"), "main line\n");
   git(repoPath, "add", "z.txt");
   git(repoPath, "commit", "-q", "-m", "main writes z.txt");
-  git(repoPath, "checkout", "-q", "staging");
-  writeFileSync(join(repoPath, "z.txt"), "staging line\n");
-  git(repoPath, "add", "z.txt");
-  git(repoPath, "commit", "-q", "-m", "staging writes z.txt");
-  git(repoPath, "checkout", "-q", "main");
+  // RETIRED: git(repoPath, "checkout", "-q", "staging");
+  const stagingWorktree = stagingWorktreePath(repoPath);
+  writeFileSync(join(stagingWorktree, "z.txt"), "staging line\n");
+  git(stagingWorktree, "add", "z.txt");
+  git(stagingWorktree, "commit", "-q", "-m", "staging writes z.txt");
+  // RETIRED: git(repoPath, "checkout", "-q", "main");
 }
 
 // Case 3: an interrupted run's task-3 worktree, lease, ended run, notes file, and stray edit.
