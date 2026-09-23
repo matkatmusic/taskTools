@@ -47,7 +47,8 @@ export async function main(input: string): Promise<RebaseResumedPacket & { next:
     ...packet, box: "Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING", scriptSignal: SCRIPT_SIGNAL.CONTINUE,
     rebased: false, conflicted: false, stoppedOccurrenceId: "", stoppedCheckoutPath: "", conflictedFilePaths: [], failureReason: "", returnTo: "",
   };
-  if (isStagingAncestorOfWorktree(packet.worktree)) {
+  const stagingIsAlreadyInWorktree = isStagingAncestorOfWorktree(packet.worktree);
+  if (stagingIsAlreadyInWorktree) {
     return retainedDestination(packet.worktree, notRebased) ?? { ...notRebased, next: "Q_DOES_FENCE_COVER_WORKTREE_Q" };
   }
 
@@ -82,5 +83,8 @@ export async function main(input: string): Promise<RebaseResumedPacket & { next:
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.
-if (realpathSync(process.argv[1]!) === realpathSync(fileURLToPath(import.meta.url)))
+const scriptPath = realpathSync(process.argv[1]!);
+const moduleUrl = fileURLToPath(import.meta.url);
+const modulePath = realpathSync(moduleUrl);
+if (scriptPath === modulePath)
   main(process.argv[2] ?? "").then((result) => console.log(JSON.stringify(result)));
