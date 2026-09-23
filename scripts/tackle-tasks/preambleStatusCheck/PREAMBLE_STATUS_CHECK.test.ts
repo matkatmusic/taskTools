@@ -20,7 +20,7 @@ test("test_PREAMBLE_STATUS_CHECK_continuesToIsTaskBlockedWhenTheTaskIsInTasksJso
     assert.deepEqual(output, {
         box: "Q_PREAMBLE_STATUS_CHECK", scriptSignal: "continue", taskNumber: 1, runId: "",
         projectRoot: output.projectRoot, worktree: "", branch: taskBranchName(1), docsMode: "", planFile: "",
-        exitType: "", exitNote: "", violations: [], next: "Q_IS_TASK_BLOCKED_Q",
+        exitType: "", exitNote: "", violations: [], missingFiles: [], next: "Q_IS_TASK_BLOCKED_Q",
     });
 });
 
@@ -38,6 +38,6 @@ test("test_PREAMBLE_STATUS_CHECK_exitsWhenTheTaskNumberIsNotInTasksJson", () => 
     assert.deepEqual(output, {
         box: "Q_PREAMBLE_STATUS_CHECK", scriptSignal: "continue", taskNumber: 999, runId: "",
         projectRoot: output.projectRoot, worktree: "", branch: taskBranchName(999), docsMode: "", planFile: "",
-        exitType: "invalid-number", exitNote: "task number is not in tasks.json", violations: [], next: "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
+        exitType: "invalid-number", exitNote: "task number is not in tasks.json", violations: [], missingFiles: [], next: "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
     });
 });

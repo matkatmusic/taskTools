@@ -23,6 +23,7 @@
         "docsMode": "UPDATE",
         "planFile": "",
         "exitType": "",
-        "exitNote": ""
+        "exitNote": "",
+        "missingFiles": []
     }
 }

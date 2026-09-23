@@ -17,7 +17,7 @@ function rejectionReason(path: string): string | null {
     return null;
 }
 
-function firstRejectedPath(paths: string[]): string | null {
+export function firstRejectedPath(paths: string[]): string | null {
     for (const path of paths) {
         const reason = rejectionReason(path);
         if (reason) return reason;

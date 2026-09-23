@@ -67,6 +67,7 @@ test("test_INIT_SUBMODULES_RECURSIVELY_continuesWhenAnOwnedFileLivesInsideASubmo
     // Verification: the submodule file is on disk after init, so the block continues to DOCUMENT_GENERATION.
     assert.equal(output.next, "B_DOCUMENT_GENERATION");
     assert.equal(output.exitType, "");
+    assert.deepEqual(output.missingFiles, []);
 });
 
 test("test_INIT_SUBMODULES_RECURSIVELY_routesToFailuresExitWhenAnOwnedFileIsMissingAndNotCreatedByTheTask", () => {
@@ -85,5 +86,6 @@ test("test_INIT_SUBMODULES_RECURSIVELY_routesToFailuresExitWhenAnOwnedFileIsMiss
     // Verification: only gone.ts is reported; the run goes to FAILURES_EXIT.
     assert.equal(output.next, "B_ADD_MISSING_FILES_TO_CREATES_FILES");
     assert.equal(output.exitType, "owned-file-missing");
+    assert.deepEqual(output.missingFiles, ["gone.ts"]);
     assert.match(output.exitNote, /task 900304: modifiableFiles names gone\.ts but that file is not in the worktree.*"createsFiles"/);
 });

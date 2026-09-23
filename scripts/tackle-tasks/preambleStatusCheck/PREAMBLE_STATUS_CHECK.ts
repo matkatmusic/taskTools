@@ -27,6 +27,7 @@ export function main(input: string): EntryPacket & { next: string } {
         planFile: "",
         exitType: "",
         exitNote: "",
+        missingFiles: [],
         violations: [],
     };
     if (!isTaskNumberValid(taskNumber, projectRoot).valid) {

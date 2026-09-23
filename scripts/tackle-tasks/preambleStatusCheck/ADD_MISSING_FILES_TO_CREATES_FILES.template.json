@@ -1,9 +1,30 @@
 {
-    "input": {},
+    "input": {
+        "box": "Q_INIT_SUBMODULES_RECURSIVELY",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/resumed-example",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/resumed-example-worktree",
+        "branch": "task-1",
+        "docsMode": "UPDATE",
+        "planFile": "",
+        "exitType": "owned-file-missing",
+        "exitNote": "",
+        "missingFiles": ["new.ts"]
+    },
     "output": {
         "box": "B_ADD_MISSING_FILES_TO_CREATES_FILES",
         "scriptSignal": "continue",
-        "note": "ADD_MISSING_FILES_TO_CREATES_FILES.ts for B_ADD_MISSING_FILES_TO_CREATES_FILES",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/resumed-example",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/resumed-example-worktree",
+        "branch": "task-1",
+        "docsMode": "UPDATE",
+        "planFile": "",
+        "exitType": "owned-file-missing",
+        "exitNote": "",
+        "missingFiles": ["new.ts"]
     }
 }

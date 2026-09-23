@@ -11,5 +11,6 @@ export type EntryPacket = {
     planFile: string;
     exitType: string;
     exitNote: string;
+    missingFiles: string[];
     violations: string[];
 };
