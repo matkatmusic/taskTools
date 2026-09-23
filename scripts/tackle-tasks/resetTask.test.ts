@@ -11,6 +11,7 @@ import { resetTask } from "./resetTask.ts";
 import { getAttemptCount, raiseAttemptCount } from "./shared/taskRunState.ts";
 import { generateSteps, resolveDiagramFolderSetting } from "./generateSteps.ts";
 import { taskWorkflowDirectory } from "../shared/taskFiles.ts";
+import { resolveTaskWorktreeConventionDirectory } from "../shared/prepareTasks.ts";
 import { readCheckpoint } from "./shared/checkpoint.ts";
 import { withTaskStateLock, writeJsonAtomically } from "../shared/taskStateLock.ts";
 import { readRetainedRebaseIntent } from "./shared/rebaseIntent.ts";
@@ -35,7 +36,7 @@ test("test_resetTask_atBlock_appliesTheBlocksResetScope", async () => {
     const repoRoot = makeTempRepoWithCommit();
     const cwd = process.cwd();
     const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
-    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-9");
     try {
         const runId = "r1";
         mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
@@ -167,7 +168,7 @@ test("test_resetTask_atBlock_reroutesThroughARebaseWhenStagingHasMovedSinceTheWo
     const repoRoot = makeTempRepoWithCommit();
     const cwd = process.cwd();
     const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
-    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-9");
     try {
         const runId = "r1";
         mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
@@ -232,7 +233,7 @@ test("test_resetTask_atBlock_resumesDirectlyAtTheBlockWhenStagingHasNotMoved", a
     const repoRoot = makeTempRepoWithCommit();
     const cwd = process.cwd();
     const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
-    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-9");
     try {
         const runId = "r1";
         mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
@@ -284,7 +285,7 @@ test("test_resetTask_atBlock_generatedFilesScopeRemovesTestReviewJson", async ()
     const repoRoot = makeTempRepoWithCommit();
     const cwd = process.cwd();
     const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
-    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-9");
     try {
         const runId = "r1";
         mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
@@ -336,7 +337,7 @@ test("test_resetTask_atBlock_regeneratesStepsJsonFromCurrentDiagrams", async () 
     const repoRoot = makeTempRepoWithCommit();
     const cwd = process.cwd();
     const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
-    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-9");
     try {
         const runId = "r1";
         mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
@@ -406,7 +407,7 @@ test("test_resetTask_atBlock_checksOutTaskBranchInEveryWorktreeSubmodule", async
     const submoduleSource = makeTempRepoWithCommit();
     const cwd = process.cwd();
     const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
-    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-9");
     try {
         git(repoRoot, "-c", "protocol.file.allow=always", "submodule", "add", submoduleSource, "vendor");
         git(repoRoot, "commit", "-q", "-m", "add vendor submodule");
@@ -528,7 +529,7 @@ test("test_resetTask_atBlock_restoresRootAndSubmoduleToTheChosenPacketsRewindPoi
     const submoduleSource = makeTempRepoWithCommit();
     const cwd = process.cwd();
     const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
-    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-9");
     try {
         git(repoRoot, "-c", "protocol.file.allow=always", "submodule", "add", submoduleSource, "vendor");
         git(repoRoot, "commit", "-q", "-m", "add vendor submodule");
@@ -600,7 +601,7 @@ test("test_resetTask_atRunFullSuite_clearsTheSuiteFixCounterWithTasksJsonAtTheRe
     const repoRoot = makeTempRepoWithCommit();
     const cwd = process.cwd();
     const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
-    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-9");
     try {
         const runId = "r1";
         writeFileSync(join(repoRoot, "tasks.json"), JSON.stringify([{
@@ -675,7 +676,7 @@ test("test_resetTask_readsThePerTaskStepsJson", async () => {
     const repoRoot = makeTempRepoWithCommit();
     const cwd = process.cwd();
     const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
-    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-9");
     try {
         const runId = "r2";
         mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
@@ -736,7 +737,7 @@ test("test_resetTask_regeneratesAMissingPerTaskStepsJsonForAPreTask10Run", async
     const repoRoot = makeTempRepoWithCommit();
     const cwd = process.cwd();
     const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
-    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-9");
     try {
         const runId = "r3";
         mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
@@ -912,7 +913,7 @@ test("test_resetTask_atBlock_restoresSkipWorktreePlanJsonAroundTheHardReset", as
     const repoRoot = makeTempRepoWithCommit();
     const cwd = process.cwd();
     const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
-    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-9");
     try {
         const runId = "r1";
         mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
@@ -986,7 +987,7 @@ test("test_resetTask_atEveryBlock_findsThePacketTheHookWrote", async () => {
     }]));
     writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), "[]");
     const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
-    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-9");
     git(repoRoot, "branch", "task-9");
     git(repoRoot, "worktree", "add", worktreePath, "task-9");
     const stubFolder = mkdtempSync(join(tmpdir(), "resetTask-stubs-"));
@@ -1062,7 +1063,7 @@ test("test_resetTask_atBlock_dropsRecordedCommitsTheRewindRemoved", async () => 
     const repoRoot = makeTempRepoWithCommit();
     const cwd = process.cwd();
     const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
-    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-9");
     try {
         const runId = "r1";
         mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
@@ -1120,7 +1121,7 @@ test("test_resetTask_atBlock_clearsTheTailCursorSoTheRelaunchStartsAtTheBlock", 
     const repoRoot = makeTempRepoWithCommit();
     const cwd = process.cwd();
     const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
-    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-9");
     try {
         const runId = "r1";
         mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
@@ -1171,7 +1172,7 @@ test("test_resetTask_atBlock_keepsAnotherTasksConcurrentRunStateWrite", { timeou
     // Task 9 uses the block-reset fixture; races resetTask's unlocked write against a locked write to task 10's run field.
     const repoRoot = makeTempRepoWithCommit();
     const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
-    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-9");
     try {
         const runId = "r1";
         mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });

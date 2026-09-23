@@ -19,7 +19,7 @@ import { currentBranchName, submodulePaths } from "../shared/repositoryBranches.
 import { generateSteps, resolveDiagramFolderSetting } from "./generateSteps.ts";
 import { generateWorkflow } from "./generateWorkflow.ts";
 import { resolveAgentOptions } from "./shared/resolveAgentOptions.ts";
-import { loadRepositoryManifest, initializeSubmodulesInWorktree } from "../shared/prepareTasks.ts";
+import { loadRepositoryManifest, initializeSubmodulesInWorktree, resolveTaskWorktreeConventionDirectory } from "../shared/prepareTasks.ts";
 import { deleteTaskMergePersistence, removeTaskWorktreeAndBranches, findRecordedMergedCommit } from "../merge-worktree-tasks/mergeTaskWorktrees.ts";
 
 // These blocks read plans/plan.json, plans/codex-review.json, or a prompt file. Cleanup removes those with the worktree and nothing keeps a copy, so a resume there has no input to work from. The brief is the one file a reset can make again.
@@ -182,9 +182,7 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     }
   }
 
-  // same worktree-path formula as taskTools-86/scripts/shared/prepareTasks.ts:resolveTaskWorktreeConventionDirectory
-  const hash = createHash("sha256").update(realpathSync(repoRoot)).digest("hex").slice(0, 8);
-  const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, `task-${taskNumber}`);
+  const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), `task-${taskNumber}`);
   const leasePath = `${worktreePath}.lease`;
   const branchName = `task-${taskNumber}`;
   const runsDirectory = join(repoRoot, ".taskTools", "runs");

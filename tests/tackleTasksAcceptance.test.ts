@@ -315,7 +315,8 @@ test("test_acceptance_reportsAFailureWhenWorktreeCreationCannotWrite", async () 
     const worktreeParent = join(isolatedTmp, "taskTools-wt");
     mkdirSync(worktreeParent, { recursive: true });
     chmodSync(worktreeParent, 0o444);
-    const env = { ...process.env, TMPDIR: isolatedTmp };
+    const env: NodeJS.ProcessEnv = { ...process.env, TMPDIR: isolatedTmp };
+    delete env.TASKTOOLS_WT_ROOT;
     try {
         // Test action: drive the run; it should fail at or before CREATE_WORKTREE, never reach a prompt box.
         const result = driveRun(5, tasksFile, root, {}, env);

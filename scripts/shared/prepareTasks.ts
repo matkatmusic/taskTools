@@ -480,7 +480,8 @@ export function recoverStaleTaskWorktreeLease(repoRoot: string, worktreePath: st
 export function resolveTaskWorktreeConventionDirectory(repoRoot: string): string {
     // realpathSync, not resolve: a child reports /private/var, so the raw string hashes differently.
     const hash = createHash("sha256").update(realpathSync(repoRoot)).digest("hex").slice(0, 8);
-    return join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`);
+    // TASKTOOLS_WT_ROOT: tests/support/wtRoot.ts points this at a per-process root it deletes on exit.
+    return join(process.env.TASKTOOLS_WT_ROOT ?? tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`);
 }
 
 // Test-only: SIGKILLs this process after the named step, so a retry can be tested against real process death.

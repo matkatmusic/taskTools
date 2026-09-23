@@ -61,6 +61,23 @@ test("test_resolveTaskWorktreeConventionDirectory_isStableAcrossCalls", () => {
     assert.equal(basename(dirname(first)), "taskTools-wt");
 });
 
+test("test_resolveTaskWorktreeConventionDirectory_honorsTheTasktoolsWtRootOverride", () => {
+    // Setup: a repo, and a root that stands in for the per-process one tests/support/wtRoot.ts makes.
+    const parent = mkdtempSync(join(tmpdir(), "prepare-tasks-override-"));
+    const repoRoot = makeTempRepoWithCommitAt(parent, "repo");
+    const overrideRoot = mkdtempSync(join(tmpdir(), "prepare-tasks-override-root-"));
+    const previous = process.env.TASKTOOLS_WT_ROOT;
+    process.env.TASKTOOLS_WT_ROOT = overrideRoot;
+
+    // Test action: resolve the convention directory while the override is set.
+    const resolved = resolveTaskWorktreeConventionDirectory(repoRoot);
+    process.env.TASKTOOLS_WT_ROOT = previous;
+
+    // Verification: it lands under the override, never under the shared os.tmpdir() root.
+    assert.equal(dirname(dirname(resolved)), overrideRoot);
+    assert.equal(basename(dirname(resolved)), "taskTools-wt");
+});
+
 test("test_renderTaskBriefContent_matchesWhatWriteTaskBriefFileWrites", () => {
     // Setup: a repo root and a task record with a declared file.
     const parent = mkdtempSync(join(tmpdir(), "prepare-tasks-brief-"));
