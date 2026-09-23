@@ -68,7 +68,7 @@ test("test_fixCatchUpConflicts_printsAPromptNamingTheConflictedPathFromTheWorktr
     const output = main(inputFor(projectRoot, worktreePath, 1));
 
     // Verification: the block hands a prompt to the agent, and the prompt file names the conflicted path.
-    assert.equal(output.box, "FIX_CATCH_UP_CONFLICTS");
+    assert.equal(output.box, "B_FIX_CATCH_UP_CONFLICTS");
     assert.equal(output.scriptSignal, "prompt");
     assert.deepEqual(getTemplateShapeMismatches(buildPromptOutputTemplate("FIX_CATCH_UP_CONFLICTS"), output), []);
     assert.doesNotMatch(String(output.prompt), /\/run-step|invoke the skill/i);

@@ -12,16 +12,16 @@ import type { EntryPacket } from "./_packet.ts";
 type Input = EntryPacket & { worktreePath: string };
 
 export function main(input: string): Record<string, unknown> {
-    const packet = JSON.parse(input) as Input;
-    const projectRoot = requireAbsolutePath("projectRoot", packet.projectRoot);
-    const worktreePath = requireAbsolutePath("worktreePath", packet.worktreePath);
-    // runId is still "" before B_MARK_TASK_ACTIVE, so this is the owner B_LOCK_STAGING_FOR_CATCH_UP took.
-    refreshOwnedSourceRepoLockOrThrow(projectRoot, buildLockOwner(packet.runId, packet.taskNumber));
-    const promptFile = `${worktreePath.replace(/\/+$/, "")}/plans/FIX_CATCH_UP_CONFLICTS.prompt.md`;
-    mkdirSync(dirname(promptFile), { recursive: true });
-    writeFileSync(promptFile, fixConflictsPrompt(worktreePath, packet.taskNumber, projectRoot, packet.runId, "staging"));
-    const prompt = `invoke '/read-file "${promptFile}"' and follow the instructions.`;
-    return { box: "FIX_CATCH_UP_CONFLICTS", scriptSignal: SCRIPT_SIGNAL.PROMPT, prompt };
+  const packet = JSON.parse(input) as Input;
+  const projectRoot = requireAbsolutePath("projectRoot", packet.projectRoot);
+  const worktreePath = requireAbsolutePath("worktreePath", packet.worktreePath);
+  // runId is still "" before B_MARK_TASK_ACTIVE, so this is the owner B_LOCK_STAGING_FOR_CATCH_UP took.
+  refreshOwnedSourceRepoLockOrThrow(projectRoot, buildLockOwner(packet.runId, packet.taskNumber));
+  const promptFile = `${worktreePath.replace(/\/+$/, "")}/plans/FIX_CATCH_UP_CONFLICTS.prompt.md`;
+  mkdirSync(dirname(promptFile), { recursive: true });
+  writeFileSync(promptFile, fixConflictsPrompt(worktreePath, packet.taskNumber, projectRoot, packet.runId, "staging"));
+  const prompt = `invoke '/read-file "${promptFile}"' and follow the instructions.`;
+  return { box: "B_FIX_CATCH_UP_CONFLICTS", scriptSignal: SCRIPT_SIGNAL.PROMPT, prompt };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.
@@ -29,4 +29,4 @@ const scriptPath = realpathSync(process.argv[1]!);
 const moduleUrl = fileURLToPath(import.meta.url);
 const modulePath = realpathSync(moduleUrl);
 if (scriptPath === modulePath)
-    console.log(JSON.stringify(main(process.argv[2] ?? "")));
+  console.log(JSON.stringify(main(process.argv[2] ?? "")));
