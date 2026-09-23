@@ -328,11 +328,14 @@ function buildFailure(
   const worktree = typeof context.packet.worktree === "string" ? context.packet.worktree : "";
   const worktreeExists = worktree !== "" && existsSync(worktree);
   if (!worktreeExists) {
-    const failingBlockHoldsSourceLock = isInsideSourceLock(`${context.step.diagram}::${context.step.box}`) === SOURCE_LOCK_REACHABLE;
-    if (failingBlockHoldsSourceLock) {
-      const projectRootIsAGitRepo = existsSync(join(String(context.packet.projectRoot), ".git"));
-      if (projectRootIsAGitRepo)
-        releaseSourceRepoLock(String(context.packet.projectRoot), buildLockOwner(String(context.packet.runId), Number(context.packet.taskNumber)));
+    // Retired: reachability starts at only the first takesSourceLock block, so a catch-up lock was never released.
+    // const failingBlockHoldsSourceLock = isInsideSourceLock(`${context.step.diagram}::${context.step.box}`) === SOURCE_LOCK_REACHABLE;
+    const projectRootIsAGitRepo = existsSync(join(String(context.packet.projectRoot), ".git"));
+    if (projectRootIsAGitRepo) {
+      const owner = buildLockOwner(String(context.packet.runId), Number(context.packet.taskNumber));
+      const failingRunHoldsSourceLock = readSourceRepoLock(String(context.packet.projectRoot))?.owner === owner;
+      if (failingRunHoldsSourceLock)
+        releaseSourceRepoLock(String(context.packet.projectRoot), owner);
     }
     return { ok: false, ran: boxesRun, errors, outcome: null, report };
   }
