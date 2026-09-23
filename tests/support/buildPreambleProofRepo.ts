@@ -87,8 +87,13 @@ function prepareResumedWorktree(repoPath: string): void {
   const runId = "20260101-000000.000";
   writeFileSync(`${worktree}.lease`, JSON.stringify({ runId }));
   const tasks = JSON.parse(readFileSync(tasksPath(repoPath), "utf8")) as Array<Record<string, unknown>>;
-  const task3 = tasks.find((task) => task.taskNumber === 3)!;
-  task3.run = {
+  let task3: Record<string, unknown> | undefined;
+  for (const task of tasks) {
+    const isTaskThree = task.taskNumber === 3;
+    if (isTaskThree)
+      task3 = task;
+  }
+  task3!.run = {
     active: false,
     worktree,
     leaseRunId: runId,
