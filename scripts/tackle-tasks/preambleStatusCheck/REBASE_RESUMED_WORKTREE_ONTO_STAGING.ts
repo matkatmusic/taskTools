@@ -33,7 +33,7 @@ export function isStagingAncestorOfWorktree(worktree: string): boolean {
 }
 
 // If a resume point was saved, go there; `own` overrides so this box's required keys still win.
-function retainedDestination(worktree: string, own: Record<string, unknown>): (RebaseResumedPacket & { next: string }) | null {
+export function retainedDestination(worktree: string, own: Record<string, unknown>): (RebaseResumedPacket & { next: string }) | null {
   const intent = readRetainedRebaseIntent(worktree);
   if (intent === null)
     return null;

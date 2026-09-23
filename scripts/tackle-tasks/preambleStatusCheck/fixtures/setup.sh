@@ -80,3 +80,19 @@ write_tasks_json reset-example "$PWD/reset-example-worktree"
 make_root resumed-example
 git -C resumed-example worktree add -q -b task-1 ../resumed-example-worktree staging
 write_tasks_json resumed-example "$PWD/resumed-example-worktree"
+
+# continue-rebase-example: task-1's worktree stopped mid-rebase on seed.txt, hand-resolved but not staged, with run-1 holding the source-repo lock.
+make_root continue-rebase-example
+git -C continue-rebase-example worktree add -q -b task-1 ../continue-rebase-example-worktree staging
+write_tasks_json continue-rebase-example "$PWD/continue-rebase-example-worktree"
+cat > continue-rebase-example/.git/taskTools-source.lock <<'LOCK'
+{"owner":"run-1:1","acquiredAt":"2026-01-01T00:00:00.000Z","heartbeatAt":"2026-01-01T00:00:00.000Z"}
+LOCK
+echo "task change" > continue-rebase-example-worktree/seed.txt
+git -C continue-rebase-example-worktree commit -q -am "task change"
+git -C continue-rebase-example checkout -q staging
+echo "staging change" > continue-rebase-example/seed.txt
+git -C continue-rebase-example commit -q -am "staging change"
+git -C continue-rebase-example checkout -q main
+git -C continue-rebase-example-worktree rebase staging > /dev/null 2>&1 || true
+echo "resolved" > continue-rebase-example-worktree/seed.txt

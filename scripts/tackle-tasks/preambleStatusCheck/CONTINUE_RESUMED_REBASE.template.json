@@ -1,14 +1,11 @@
 {
-    "input": {},
-    "output": {
-        "box": "Q_CONTINUE_RESUMED_REBASE",
+    "input": {
+        "box": "B_FIX_RESUMED_REBASE_CONFLICTS",
         "scriptSignal": "continue",
-        "note": "CONTINUE_RESUMED_REBASE.ts for Q_CONTINUE_RESUMED_REBASE",
-        "input": "",
         "taskNumber": 1,
         "runId": "run-1",
-        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/resumed-example",
-        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/resumed-example-worktree",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/continue-rebase-example",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/continue-rebase-example-worktree",
         "branch": "task-1",
         "docsMode": "",
         "planFile": "",
@@ -17,9 +14,34 @@
         "rebased": true,
         "conflicted": true,
         "stoppedOccurrenceId": "",
-        "stoppedCheckoutPath": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/resumed-example-worktree",
+        "stoppedCheckoutPath": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/continue-rebase-example-worktree",
         "conflictedFilePaths": ["seed.txt"],
         "failureReason": "",
-        "returnTo": "pipeline-preambleStatusCheck.mmd::DOES_FENCE_COVER_WORKTREE_Q"
+        "returnTo": "",
+        "message": "",
+        "additionalData": { "resolved": true, "unresolvedPaths": [] }
+    },
+    "output": {
+        "box": "Q_CONTINUE_RESUMED_REBASE",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/continue-rebase-example",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/continue-rebase-example-worktree",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "rebased": true,
+        "conflicted": false,
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "",
+        "conflictedFilePaths": [],
+        "failureReason": "",
+        "returnTo": "",
+        "message": "",
+        "additionalData": { "resolved": true, "unresolvedPaths": [] },
+        "next": "Q_DOES_FENCE_COVER_WORKTREE_Q"
     }
 }
