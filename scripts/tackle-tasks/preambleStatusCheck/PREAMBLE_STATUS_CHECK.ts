@@ -27,6 +27,7 @@ export function main(input: string): EntryPacket & { next: string } {
         planFile: "",
         exitType: "",
         exitNote: "",
+        violations: [],
     };
     if (!isTaskNumberValid(taskNumber, projectRoot).valid) {
         return { ...packet, exitType: "invalid-number", exitNote: "task number is not in tasks.json", next: "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT" };

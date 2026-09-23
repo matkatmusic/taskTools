@@ -11,4 +11,5 @@ export type EntryPacket = {
     planFile: string;
     exitType: string;
     exitNote: string;
+    violations: string[];
 };

@@ -47,7 +47,7 @@ test("test_DOES_FENCE_COVER_WORKTREE_Q_ignoresTheResumedRunsOwnCheckpointFile", 
     assert.equal(output.exitType, "");
 });
 
-test("test_DOES_FENCE_COVER_WORKTREE_Q_choosesFailuresExitWhenAnEditTouchesAnUndeclaredFile", () => {
+test("test_DOES_FENCE_COVER_WORKTREE_Q_fillsViolationsAndDropsTheExitNoteWhenAnEditTouchesAnUndeclaredFile", () => {
     const rootOrigin = makeCommittedRepo("DOES_FENCE_COVER_WORKTREE_Q-");
     const groupId = 900_402;
     const worktreePath = makeLinkedWorktree(rootOrigin, groupId);
@@ -58,7 +58,21 @@ test("test_DOES_FENCE_COVER_WORKTREE_Q_choosesFailuresExitWhenAnEditTouchesAnUnd
     const output = main(packet(groupId, worktreePath, rootOrigin));
 
     assert.equal(output.next, "B_AMEND_TASK_FILE_LIST");
-    assert.equal(output.exitType, "fence-violation");
-    assert.match(String(output.exitNote), /outside\.txt/);
-    assert.match(String(output.exitNote), new RegExp(`\\/tackle-tasks \\[${groupId}\\] to resume`));
+    assert.deepEqual(output.violations, ["outside.txt"]);
+    assert.equal(output.exitType, "");
+    assert.equal(output.exitNote, "");
+});
+
+test("test_DOES_FENCE_COVER_WORKTREE_Q_reportsEveryViolatingPathWhenMultipleFilesAreOutsideTheFence", () => {
+    const rootOrigin = makeCommittedRepo("DOES_FENCE_COVER_WORKTREE_Q-");
+    const groupId = 900_404;
+    const worktreePath = makeLinkedWorktree(rootOrigin, groupId);
+    seedTasksFile(rootOrigin, [{ taskNumber: groupId, title: "t", modifiableFiles: ["seed.txt"] }]);
+    writeFileSync(join(worktreePath, "outside-a.txt"), "not owned\n");
+    writeFileSync(join(worktreePath, "outside-b.txt"), "not owned\n");
+    git(worktreePath, "add", "outside-a.txt", "outside-b.txt");
+
+    const output = main(packet(groupId, worktreePath, rootOrigin));
+
+    assert.deepEqual(output.violations, ["outside-a.txt", "outside-b.txt"]);
 });

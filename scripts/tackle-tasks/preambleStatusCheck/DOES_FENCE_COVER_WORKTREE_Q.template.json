@@ -24,6 +24,7 @@
         "planFile": "",
         "exitType": "",
         "exitNote": "",
+        "violations": [],
         "next": "Q_INIT_SUBMODULES_RECURSIVELY"
     }
 }

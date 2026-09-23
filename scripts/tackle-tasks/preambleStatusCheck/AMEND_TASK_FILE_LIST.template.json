@@ -1,9 +1,30 @@
 {
-    "input": {},
+    "input": {
+        "box": "Q_DOES_FENCE_COVER_WORKTREE_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/resumed-example",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/resumed-example-worktree",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "violations": []
+    },
     "output": {
         "box": "B_AMEND_TASK_FILE_LIST",
         "scriptSignal": "continue",
-        "note": "AMEND_TASK_FILE_LIST.ts for B_AMEND_TASK_FILE_LIST",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/resumed-example",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/resumed-example-worktree",
+        "branch": "task-1",
+        "docsMode": "UPDATE",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "violations": []
     }
 }
