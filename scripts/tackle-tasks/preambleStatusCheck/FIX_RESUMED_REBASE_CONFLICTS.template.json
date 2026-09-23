@@ -1,9 +1,29 @@
 {
-    "input": {},
-    "output": {
-        "box": "B_FIX_RESUMED_REBASE_CONFLICTS",
+    "input": {
+        "box": "Q_REBASE_RESUMED_WORKTREE_ONTO_STAGING",
         "scriptSignal": "continue",
-        "note": "FIX_RESUMED_REBASE_CONFLICTS.ts for B_FIX_RESUMED_REBASE_CONFLICTS",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/resumed-example",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/resumed-example-worktree",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "rebased": true,
+        "conflicted": true,
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/resumed-example-worktree",
+        "conflictedFilePaths": ["seed.txt"],
+        "failureReason": "",
+        "returnTo": "pipeline-preambleStatusCheck.mmd::DOES_FENCE_COVER_WORKTREE_Q"
+    },
+    "agentAnswer": {
+        "message": "",
+        "additionalData": {
+            "resolved": true,
+            "unresolvedPaths": []
+        }
     }
 }

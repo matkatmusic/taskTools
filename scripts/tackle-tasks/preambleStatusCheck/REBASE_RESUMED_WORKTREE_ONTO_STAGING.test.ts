@@ -106,7 +106,7 @@ test("test_REBASE_RESUMED_WORKTREE_ONTO_STAGING_routesConflictsToTheFixPathWithR
     const output = await main(packet(root, worktree, 3, "run-3"));
 
     assert.deepEqual(getTemplateShapeMismatches(TEMPLATE.output, output), []);
-    assert.equal(output.next, "pipeline-commitMergeConflictFixIfNeeded.mmd::ARE_2_CONFLICT_FIXES_DONE_Q");
+    assert.equal(output.next, "B_FIX_RESUMED_REBASE_CONFLICTS");
     assert.equal(output.conflicted, true);
     assert.deepEqual(output.conflictedFilePaths, ["shared.txt"]);
     assert.equal(output.returnTo, "pipeline-preambleStatusCheck.mmd::DOES_FENCE_COVER_WORKTREE_Q");
@@ -164,8 +164,8 @@ test("test_REBASE_RESUMED_WORKTREE_ONTO_STAGING_returnToNamesTheRetainedTargetOn
     const output = await main(packet(root, worktree, 6, "run-6"));
 
     assert.deepEqual(getTemplateShapeMismatches(TEMPLATE.output, output), []);
-    assert.equal(output.next, "pipeline-commitMergeConflictFixIfNeeded.mmd::ARE_2_CONFLICT_FIXES_DONE_Q");
+    assert.equal(output.next, "B_FIX_RESUMED_REBASE_CONFLICTS");
     assert.equal(output.returnTo, "pipeline-x.mmd::TARGET_BLOCK");
-    // Not cleared yet: IS_REBASE_FINISHED_Q clears it once the conflict is actually resolved.
+    // Not cleared yet: Q_CONTINUE_RESUMED_REBASE clears it once the conflict is actually resolved.
     assert.notEqual(readRetainedRebaseIntent(worktree), null);
 });

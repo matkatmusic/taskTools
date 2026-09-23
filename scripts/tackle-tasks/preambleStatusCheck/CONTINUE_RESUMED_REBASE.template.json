@@ -4,6 +4,22 @@
         "box": "Q_CONTINUE_RESUMED_REBASE",
         "scriptSignal": "continue",
         "note": "CONTINUE_RESUMED_REBASE.ts for Q_CONTINUE_RESUMED_REBASE",
-        "input": ""
+        "input": "",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/resumed-example",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/resumed-example-worktree",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "rebased": true,
+        "conflicted": true,
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/resumed-example-worktree",
+        "conflictedFilePaths": ["seed.txt"],
+        "failureReason": "",
+        "returnTo": "pipeline-preambleStatusCheck.mmd::DOES_FENCE_COVER_WORKTREE_Q"
     }
 }

@@ -66,14 +66,14 @@ export async function main(input: string): Promise<RebaseResumedPacket & { next:
     throw new Error(`REBASE_RESUMED_WORKTREE_ONTO_STAGING: rebase failed: ${outcome.failureReason}`);
   }
   if (outcome.conflicted) {
-    // IS_REBASE_FINISHED_Q must release this lock later and clear the rebase intent.
+    // Q_CONTINUE_RESUMED_REBASE must release this lock later and clear the rebase intent.
     return {
       ...notRebased, rebased: true, conflicted: true,
       stoppedOccurrenceId: outcome.stoppedAt?.occurrenceId ?? "",
       stoppedCheckoutPath: outcome.stoppedAt?.checkoutPath ?? "",
       conflictedFilePaths: outcome.conflictedFilePaths,
       returnTo: readRetainedRebaseIntent(packet.worktree)?.targetBlock ?? RETURN_TO,
-      next: "pipeline-commitMergeConflictFixIfNeeded.mmd::ARE_2_CONFLICT_FIXES_DONE_Q",
+      next: "B_FIX_RESUMED_REBASE_CONFLICTS",
     };
   }
   releaseSourceRepoLock(packet.projectRoot, buildLockOwner(packet.runId, packet.taskNumber));
