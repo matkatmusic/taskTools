@@ -10603,5 +10603,34 @@
     "completionDate": "2026-09-22",
     "commitHashes": [],
     "closureNote": ""
+  },
+  {
+    "taskNumber": 258,
+    "version": "736b93d18bdcbf2e58fa41fe40df77c3e03cec30",
+    "title": "[launch 19] Full suite passes via npm run test:baseline",
+    "userDescription": "19. `npm run test:baseline` passes with no failure outside `.taskTools/knownFailingTests.json`.\n    WHY: each step above ran only its own tests.\n    HOW: one agent runs the baseline once and fixes code, never tests.",
+    "chainGoal": [
+      "A tackle-tasks launch reaches the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet. The chain is [launch 1] to [launch 22] from specs/launch-reaches-planning-alone.md."
+    ],
+    "goal": [
+      "- `npm run test:baseline` exits 0 with no failure outside `.taskTools/knownFailingTests.json`, confirming [launch 1] through [launch 18] leave no regression, with the command run and its output pasted."
+    ],
+    "notInScope": [
+      "- Any code change: this is a check-only task; a failure here is fixed by returning to whichever of [launch 1] through [launch 18] caused it, not by editing here.",
+      "- Rewriting the known-failing-tests baseline: only `/task-tests` may do that, and only when the user asks."
+    ],
+    "problemSolvedByTask": "Check-only item: the check proves the whole chain from [launch 1] through [launch 18] lands with no test regression before [launch 21] proves the four real launches by hand.",
+    "description": "This is a check-only task with no code change: run npm run test:baseline and paste its output. A pass confirms every prior item in the chain, launch 1 through launch 18, leaves the suite in the same state as the committed .taskTools/knownFailingTests.json baseline. A failure not already in that baseline means a prior chain item introduced a regression, fixed by returning to that item, never by editing here.",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 1,
+    "completionDate": "2026-09-22",
+    "commitHashes": [],
+    "closureNote": ""
   }
 ]

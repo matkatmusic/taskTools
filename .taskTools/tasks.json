@@ -342,32 +342,6 @@
     "difficulty": 4
   },
   {
-    "taskNumber": 258,
-    "version": "736b93d18bdcbf2e58fa41fe40df77c3e03cec30",
-    "title": "[launch 19] Full suite passes via npm run test:baseline",
-    "userDescription": "19. `npm run test:baseline` passes with no failure outside `.taskTools/knownFailingTests.json`.\n    WHY: each step above ran only its own tests.\n    HOW: one agent runs the baseline once and fixes code, never tests.",
-    "chainGoal": [
-      "A tackle-tasks launch reaches the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet. The chain is [launch 1] to [launch 22] from specs/launch-reaches-planning-alone.md."
-    ],
-    "goal": [
-      "- `npm run test:baseline` exits 0 with no failure outside `.taskTools/knownFailingTests.json`, confirming [launch 1] through [launch 18] leave no regression, with the command run and its output pasted."
-    ],
-    "notInScope": [
-      "- Any code change: this is a check-only task; a failure here is fixed by returning to whichever of [launch 1] through [launch 18] caused it, not by editing here.",
-      "- Rewriting the known-failing-tests baseline: only `/task-tests` may do that, and only when the user asks."
-    ],
-    "problemSolvedByTask": "Check-only item: the check proves the whole chain from [launch 1] through [launch 18] lands with no test regression before [launch 21] proves the four real launches by hand.",
-    "description": "This is a check-only task with no code change: run npm run test:baseline and paste its output. A pass confirms every prior item in the chain, launch 1 through launch 18, leaves the suite in the same state as the committed .taskTools/knownFailingTests.json baseline. A failure not already in that baseline means a prior chain item introduced a regression, fixed by returning to that item, never by editing here.",
-    "modifiableFiles": [],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "schemaVersion": "1.0.1",
-    "hasTests": false,
-    "tests": "",
-    "difficulty": 1
-  },
-  {
     "taskNumber": 259,
     "version": "970cedb3821ee0658d09ea689f56b42893935b6a",
     "title": "[launch 20] Build a fixture repo for the four preamble stops",
@@ -399,13 +373,7 @@
     "schemaVersion": "1.0.1",
     "hasTests": true,
     "tests": "tests/support/buildPreambleProofRepo.test.ts, five tests, each starting from a fresh `build` (the script's build subcommand run in a fresh temp directory): test_buildPreambleProofRepo_build_writesTheFourTaskFixture: run `build`; assert the printed repo path exists, `git -C <repo> branch --list` shows both `main` and `staging`, `a.txt` through `d.txt` exist and `e.txt` does not, and `.taskTools/tasks.json` in that repo is an array of exactly 4 entries where task 1's `modifiableFiles` is `[\"a.txt\"]` with no `blockedBy`, task 2's `modifiableFiles` is `[\"b.txt\"]` with `blockedBy: [{taskNumber: 1, reason: <a non-empty string>}]`, task 3's `modifiableFiles` is `[\"c.txt\"]` with `blockedBy: [{taskNumber: 2, reason: <a non-empty string>}]`, and task 4's `modifiableFiles` is `[\"d.txt\", \"e.txt\"]` with `blockedBy: [{taskNumber: 3, reason: <a non-empty string>}]`. test_buildPreambleProofRepo_prepare1_leavesStagingBehind: run `build` then `prepare 1`; assert `git -C <repo> rev-list --count staging..main` prints `1` and `git -C <repo> rev-list --count main..staging` prints `0`. test_buildPreambleProofRepo_prepare2_leavesADivergedConflict: run `build` then `prepare 2`; assert `git -C <repo> rev-list --count staging..main` prints `1`, `git -C <repo> rev-list --count main..staging` prints `1`, and `git -C <repo> merge-tree $(git -C <repo> merge-base main staging) main staging` reports a conflict marker on `z.txt`. test_buildPreambleProofRepo_prepare3_fakesAResumedWorktree: run `build` then `prepare 3`; read `.taskTools/tasks.json` and assert task 3's `run.worktree` is a path that exists on disk, `run.history` has exactly one entry with `endedAt` non-null and `implementationNotesFile` set to a path that exists inside `run.worktree`, and `run.leaseRunId` equals that entry's `runId`; assert `<run.worktree>.lease` exists on disk and its parsed JSON `runId` field equals `run.leaseRunId`; assert `git -C <run.worktree> status --porcelain` lists `stray.txt`. test_buildPreambleProofRepo_prepare4_leavesTheListedFileMissing: run `build` then `prepare 4`; assert `e.txt` does not exist anywhere in the repo and task 4's `modifiableFiles` in `.taskTools/tasks.json` is still `[\"d.txt\", \"e.txt\"]`, unchanged from build.",
-    "difficulty": 6,
-    "blockedBy": [
-      {
-        "taskNumber": 258,
-        "reason": "chain order: [launch 19] comes before [launch 20]"
-      }
-    ]
+    "difficulty": 6
   },
   {
     "taskNumber": 260,
