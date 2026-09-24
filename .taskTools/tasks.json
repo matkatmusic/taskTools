@@ -374,31 +374,31 @@
   },
   {
     "taskNumber": 264,
-    "version": "1bd3abe2fb525d95ecf301d2b78f24d231fee28e",
-    "title": "Let a task's real test location satisfy the paired-test gate",
-    "userDescription": "The paired-test gate (RUN_TASK_TESTS / full suite) demands a sibling <name>.test.ts for every owned .ts file (e.g. dom.test.ts, state.test.ts) even when the task's real test is elsewhere (tests/index.html.test.ts). Task 43 had to add dummy test files by hand. requiredTestGroups in scripts/tackle-tasks/shared/writableFiles.ts guesses candidates from modifiableFiles; runTaskTestsImpl.ts:130 fails when none exist. Reported by the task 43 session on 2026-09-24.",
+    "version": "21a11f2fa60c690dcb244ec95fd0f3e04d2e0e08",
+    "title": "Run the full suite when package.json lives in a submodule",
+    "userDescription": "RUN_FULL_SUITE throws \"task-tests: no package.json in <worktree root>\" (scripts/taskTestsRunner.ts:101) when the project's package.json lives in a submodule (mermaid-editor), not the repo root.",
     "goal": [
-      "- A task whose real coverage lives in a file that is not a sibling of any owned source file (e.g. tests/index.html.test.ts) passes RUN_TASK_TESTS without adding dummy sibling test files",
-      "- requiredTestGroups no longer forces a sibling test file to exist for a source file whose test coverage is declared elsewhere",
-      "- A task with no such override still fails the gate when it truly lacks any test coverage"
+      "- The full test step runs the submodule suite when the top folder has no package.json.",
+      "- The submodule fixture test passes.",
+      "- Task 43 passes RUN_FULL_SUITE with no hand edits."
     ],
     "notInScope": [
-      "- Changing how tests are written or run during IMPLEMENT_TASK/FIX_IMPLEMENT_TASK_TESTS phases is not in scope; only the gate's file-presence check in requiredTestGroups/runTaskTestsImpl is",
-      "- Backfilling missing sibling test files on already-completed tasks (e.g. task 43's dummy files) is not in scope"
+      "- The paired-test check that guesses sibling test file names; the paired-test task owns it."
     ],
-    "problemSolvedByTask": "The paired-test gate (RUN_TASK_TESTS / full suite) demands a sibling <name>.test.ts for every owned .ts file even when the task's real test is elsewhere, forcing agents to hand-write dummy test files just to pass the gate.",
-    "description": "requiredTestGroups (scripts/tackle-tasks/shared/writableFiles.ts) builds one test-file requirement per modifiableFiles entry by calling testFileCandidates (scripts/hooks/relatedTests.ts), which only proposes sibling paths (e.g. dom.ts -> dom.test.ts). It has no way to know a task's real coverage lives in an unrelated file like tests/index.html.test.ts. runTaskTestsImpl.ts consumes requiredTestGroups' output and fails the task with 'the task declares tests but the branch lacks: ...' when none of a group's sibling candidates exist on disk, regardless of whether other declared/changed test files already cover that source file. A fix needs a way for a task (or the task record itself, e.g. via its files/tests fields) to name the actual test file(s) covering a given source file, which requiredTestGroups and runTaskTestsImpl's absentPairedTests check should accept as satisfying that source file's group instead of only sibling-named candidates.",
+    "problemSolvedByTask": "Suite step fails: RUN_FULL_SUITE cannot run tests for a project whose package.json lives in a submodule.",
+    "description": "runSuite in scripts/shared/taskTestsRunner.ts requires package.json at the cwd it is given and throws otherwise. Both callers, runTaskTests in scripts/tackle-tasks/shared/runTaskTestsImpl.ts and scripts/hooks/taskTestsHook.ts, pass the top-level worktree path. Task 43's project keeps its package.json in the mermaid-editor submodule, so runSuite throws before any test runs. User ruling: keep it simple. When the given folder has no package.json, search its subfolders recursively for package.json and run the suite from the folder where it is found.",
     "modifiableFiles": [
-      "scripts/tackle-tasks/shared/writableFiles.ts",
-      "scripts/hooks/relatedTests.ts",
+      "scripts/shared/taskTestsRunner.ts",
       "scripts/tackle-tasks/shared/runTaskTestsImpl.ts",
-      "scripts/tackle-tasks/shared/writableFiles.test.ts"
+      "scripts/hooks/taskTestsHook.ts",
+      "tests/taskTestsRunner.test.ts"
     ],
     "readOnlyFiles": [
       "*"
     ],
     "schemaVersion": "1.0.1",
-    "hasTests": false,
-    "tests": ""
+    "hasTests": true,
+    "tests": "Make a scratch repo whose package.json is only inside a submodule. Run the full test step. It finds the submodule package.json and runs its tests.",
+    "difficulty": 4
   }
 ]
