@@ -371,5 +371,60 @@
     "hasTests": true,
     "tests": "a) With TASKTOOLS_WT_ROOT set, resolveTaskWorktreeConventionDirectory returns a path under it. b) addOrVerifyLinkedWorktree throws when sourceCheckoutPath is a plain folder inside a git repo but has no .git of its own; no worktree gets registered in the parent repo.",
     "difficulty": 3
+  },
+  {
+    "taskNumber": 263,
+    "version": "62aab2f4cc3608559224c992bf828ad488fc82c5",
+    "title": "Add move-task skill and cross-project blockedBy entries",
+    "userDescription": "add a 'move-task' skill that moves a task from one repo to another.  'blockedBy' should have a 'project:Path' field per entry to allow cross-project blockers.  'task-stats' will need to show these project paths when printing out the blockers.",
+    "goal": [
+      "- `/move-task <N> <destRepoPath>` removes task N from the source tasks.json and appends it to the destination tasks.json",
+      "- every blockedBy entry has a `project` field holding the absolute repo path of the blocking task",
+      "- `/task-stats` prints each blocker as `<projectPath>#<taskNumber>` when the blocker lives in another repo",
+      "- an old blockedBy entry with no `project` field still loads and is treated as same-repo"
+    ],
+    "notInScope": [
+      "- tackle-tasks does not resolve or close cross-repo blockers; it only prints the same blocked-by line task-stats prints",
+      "- move-task moves the task record only, never a worktree, branch, or plan file",
+      "- the moved task takes the next free number in the destination; no number is kept"
+    ],
+    "problemSolvedByTask": "When a project is refactored into submodules and some of those projects are meant for the submodule only, there is no mechanism to move the task other than manually copy/paste, which can be erroneous.",
+    "description": "blockedBy entries are typed `{taskNumber, reason}` in scripts/shared/checkBlockers.ts (blockerReport/openBlockersOf), scripts/tackle-tasks/shared/isTaskBlocked.ts, scripts/shared/unblockDependents.ts, scripts/shared/getTaskDetails.ts (listTaskTitles), and scripts/shared/appendTask.ts (NewTaskPayload/buildTaskEntry); all need an optional `project` path field threaded through. openBlockersOf in checkBlockers.ts drops any blockedBy entry whose taskNumber is not in the local open set, so a cross-project entry is silently treated as unblocked; an entry with `project` set must always count as blocking, since resolving it is out of scope. unblockDependents.ts must skip project-tagged entries when a local task closes. scripts/hooks/taskStats.ts and taskStatsHook.ts are the hook-triggered (UserPromptSubmit, matched on prompt text) mechanism move-task's hook mirrors; taskStats has no per-task blocks/blocked-by line yet, so that is a design decision. tasks.json is seeded by seedTaskFilesIfAbsent in scripts/shared/taskFiles.ts, called from appendTaskToTasksJson in appendTask.ts, which the destination write reuses; numbering is max(existing)+1 per tasks.json+completedTasks.json pair, per repo. No existing script writes two repos under scripts/shared/taskStateLock.ts, so scripts/shared/moveTask.ts locks and edits both tasks.json files, removes the task from source, appends it renumbered to destination, and rewrites its blockedBy entries with `project` pointing back at source; scripts/hooks/moveTaskHook.ts parses \"/move-task <N> <destination>\" with a new hooks/hooks.json UserPromptSubmit entry.",
+    "modifiableFiles": [
+      "hooks/hooks.json",
+      "scripts/shared/checkBlockers.ts",
+      "scripts/tackle-tasks/shared/isTaskBlocked.ts",
+      "scripts/shared/unblockDependents.ts",
+      "scripts/shared/getTaskDetails.ts",
+      "scripts/hooks/taskStats.ts",
+      "scripts/hooks/taskStatsHook.ts",
+      "scripts/shared/appendTask.ts",
+      "scripts/shared/taskFiles.ts",
+      "tests/checkBlockers.test.ts",
+      "tests/unblockDependents.test.ts",
+      "tests/getTaskDetails.test.ts",
+      "tests/taskStats.test.ts",
+      "tests/taskStatsHook.test.ts",
+      "tests/appendTask.test.ts",
+      "skills/move-task/SKILL.md",
+      "scripts/shared/moveTask.ts",
+      "scripts/hooks/moveTaskHook.ts",
+      "tests/moveTask.test.ts",
+      "tests/moveTaskHook.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "createsFiles": [
+      "skills/move-task/SKILL.md",
+      "scripts/shared/moveTask.ts",
+      "scripts/hooks/moveTaskHook.ts",
+      "tests/moveTask.test.ts",
+      "tests/moveTaskHook.test.ts"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "create 2 repos A and B. create task 1 and 2 in repo A.  task 2 is blocked by task 1.  'move-task' moves task 2 to repo B.  task-stats in A shows 'task 1's details, as well as a \"blocks <project:N>\" type of message.  task-stats in B shows 'task 2's details, as well as \"blocked by <path/to/A:1\".  both tasks.json files work.  if B doesn't have a .taskTools/tasks.json file, one is initialized using the same approach that taskTools:create-task uses to seed the tasks.json file.  running 'tackle-tasks [2]' in B before A:1 is closed would print out the same \"blocked by: <path/to/A:1>\" that task-stats shows. The skill file itself is 100% script-based, relying on triggering a hook like the mechanism 'task-stats' uses to perform work, and the argument list is 'move-task <N> <destination>'.",
+    "difficulty": 9
   }
 ]
