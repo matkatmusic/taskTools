@@ -373,58 +373,32 @@
     "difficulty": 3
   },
   {
-    "taskNumber": 263,
-    "version": "62aab2f4cc3608559224c992bf828ad488fc82c5",
-    "title": "Add move-task skill and cross-project blockedBy entries",
-    "userDescription": "add a 'move-task' skill that moves a task from one repo to another.  'blockedBy' should have a 'project:Path' field per entry to allow cross-project blockers.  'task-stats' will need to show these project paths when printing out the blockers.",
+    "taskNumber": 264,
+    "version": "1bd3abe2fb525d95ecf301d2b78f24d231fee28e",
+    "title": "Let a task's real test location satisfy the paired-test gate",
+    "userDescription": "The paired-test gate (RUN_TASK_TESTS / full suite) demands a sibling <name>.test.ts for every owned .ts file (e.g. dom.test.ts, state.test.ts) even when the task's real test is elsewhere (tests/index.html.test.ts). Task 43 had to add dummy test files by hand. requiredTestGroups in scripts/tackle-tasks/shared/writableFiles.ts guesses candidates from modifiableFiles; runTaskTestsImpl.ts:130 fails when none exist. Reported by the task 43 session on 2026-09-24.",
     "goal": [
-      "- `/move-task <N> <destRepoPath>` removes task N from the source tasks.json and appends it to the destination tasks.json",
-      "- every blockedBy entry has a `project` field holding the absolute repo path of the blocking task",
-      "- `/task-stats` prints each blocker as `<projectPath>#<taskNumber>` when the blocker lives in another repo",
-      "- an old blockedBy entry with no `project` field still loads and is treated as same-repo"
+      "- A task whose real coverage lives in a file that is not a sibling of any owned source file (e.g. tests/index.html.test.ts) passes RUN_TASK_TESTS without adding dummy sibling test files",
+      "- requiredTestGroups no longer forces a sibling test file to exist for a source file whose test coverage is declared elsewhere",
+      "- A task with no such override still fails the gate when it truly lacks any test coverage"
     ],
     "notInScope": [
-      "- tackle-tasks does not resolve or close cross-repo blockers; it only prints the same blocked-by line task-stats prints",
-      "- move-task moves the task record only, never a worktree, branch, or plan file",
-      "- the moved task takes the next free number in the destination; no number is kept"
+      "- Changing how tests are written or run during IMPLEMENT_TASK/FIX_IMPLEMENT_TASK_TESTS phases is not in scope; only the gate's file-presence check in requiredTestGroups/runTaskTestsImpl is",
+      "- Backfilling missing sibling test files on already-completed tasks (e.g. task 43's dummy files) is not in scope"
     ],
-    "problemSolvedByTask": "When a project is refactored into submodules and some of those projects are meant for the submodule only, there is no mechanism to move the task other than manually copy/paste, which can be erroneous.",
-    "description": "blockedBy entries are typed `{taskNumber, reason}` in scripts/shared/checkBlockers.ts (blockerReport/openBlockersOf), scripts/tackle-tasks/shared/isTaskBlocked.ts, scripts/shared/unblockDependents.ts, scripts/shared/getTaskDetails.ts (listTaskTitles), and scripts/shared/appendTask.ts (NewTaskPayload/buildTaskEntry); all need an optional `project` path field threaded through. openBlockersOf in checkBlockers.ts drops any blockedBy entry whose taskNumber is not in the local open set, so a cross-project entry is silently treated as unblocked; an entry with `project` set must always count as blocking, since resolving it is out of scope. unblockDependents.ts must skip project-tagged entries when a local task closes. scripts/hooks/taskStats.ts and taskStatsHook.ts are the hook-triggered (UserPromptSubmit, matched on prompt text) mechanism move-task's hook mirrors; taskStats has no per-task blocks/blocked-by line yet, so that is a design decision. tasks.json is seeded by seedTaskFilesIfAbsent in scripts/shared/taskFiles.ts, called from appendTaskToTasksJson in appendTask.ts, which the destination write reuses; numbering is max(existing)+1 per tasks.json+completedTasks.json pair, per repo. No existing script writes two repos under scripts/shared/taskStateLock.ts, so scripts/shared/moveTask.ts locks and edits both tasks.json files, removes the task from source, appends it renumbered to destination, and rewrites its blockedBy entries with `project` pointing back at source; scripts/hooks/moveTaskHook.ts parses \"/move-task <N> <destination>\" with a new hooks/hooks.json UserPromptSubmit entry.",
+    "problemSolvedByTask": "The paired-test gate (RUN_TASK_TESTS / full suite) demands a sibling <name>.test.ts for every owned .ts file even when the task's real test is elsewhere, forcing agents to hand-write dummy test files just to pass the gate.",
+    "description": "requiredTestGroups (scripts/tackle-tasks/shared/writableFiles.ts) builds one test-file requirement per modifiableFiles entry by calling testFileCandidates (scripts/hooks/relatedTests.ts), which only proposes sibling paths (e.g. dom.ts -> dom.test.ts). It has no way to know a task's real coverage lives in an unrelated file like tests/index.html.test.ts. runTaskTestsImpl.ts consumes requiredTestGroups' output and fails the task with 'the task declares tests but the branch lacks: ...' when none of a group's sibling candidates exist on disk, regardless of whether other declared/changed test files already cover that source file. A fix needs a way for a task (or the task record itself, e.g. via its files/tests fields) to name the actual test file(s) covering a given source file, which requiredTestGroups and runTaskTestsImpl's absentPairedTests check should accept as satisfying that source file's group instead of only sibling-named candidates.",
     "modifiableFiles": [
-      "hooks/hooks.json",
-      "scripts/shared/checkBlockers.ts",
-      "scripts/tackle-tasks/shared/isTaskBlocked.ts",
-      "scripts/shared/unblockDependents.ts",
-      "scripts/shared/getTaskDetails.ts",
-      "scripts/hooks/taskStats.ts",
-      "scripts/hooks/taskStatsHook.ts",
-      "scripts/shared/appendTask.ts",
-      "scripts/shared/taskFiles.ts",
-      "tests/checkBlockers.test.ts",
-      "tests/unblockDependents.test.ts",
-      "tests/getTaskDetails.test.ts",
-      "tests/taskStats.test.ts",
-      "tests/taskStatsHook.test.ts",
-      "tests/appendTask.test.ts",
-      "skills/move-task/SKILL.md",
-      "scripts/shared/moveTask.ts",
-      "scripts/hooks/moveTaskHook.ts",
-      "tests/moveTask.test.ts",
-      "tests/moveTaskHook.test.ts"
+      "scripts/tackle-tasks/shared/writableFiles.ts",
+      "scripts/hooks/relatedTests.ts",
+      "scripts/tackle-tasks/shared/runTaskTestsImpl.ts",
+      "scripts/tackle-tasks/shared/writableFiles.test.ts"
     ],
     "readOnlyFiles": [
       "*"
     ],
-    "createsFiles": [
-      "skills/move-task/SKILL.md",
-      "scripts/shared/moveTask.ts",
-      "scripts/hooks/moveTaskHook.ts",
-      "tests/moveTask.test.ts",
-      "tests/moveTaskHook.test.ts"
-    ],
     "schemaVersion": "1.0.1",
-    "hasTests": true,
-    "tests": "create 2 repos A and B. create task 1 and 2 in repo A.  task 2 is blocked by task 1.  'move-task' moves task 2 to repo B.  task-stats in A shows 'task 1's details, as well as a \"blocks <project:N>\" type of message.  task-stats in B shows 'task 2's details, as well as \"blocked by <path/to/A:1\".  both tasks.json files work.  if B doesn't have a .taskTools/tasks.json file, one is initialized using the same approach that taskTools:create-task uses to seed the tasks.json file.  running 'tackle-tasks [2]' in B before A:1 is closed would print out the same \"blocked by: <path/to/A:1>\" that task-stats shows. The skill file itself is 100% script-based, relying on triggering a hook like the mechanism 'task-stats' uses to perform work, and the argument list is 'move-task <N> <destination>'.",
-    "difficulty": 9
+    "hasTests": false,
+    "tests": ""
   }
 ]
