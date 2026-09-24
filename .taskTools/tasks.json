@@ -400,5 +400,33 @@
     "hasTests": true,
     "tests": "Make a scratch repo whose package.json is only inside a submodule. Run the full test step. It finds the submodule package.json and runs its tests.",
     "difficulty": 4
+  },
+  {
+    "taskNumber": 265,
+    "version": "a1eceb4b049daa4e753a3860c702d5fbc7aa2ff6",
+    "title": "Let a task's real test satisfy the paired-test check",
+    "userDescription": "The paired-test gate (RUN_TASK_TESTS / full suite) demands a sibling <name>.test.ts for every owned .ts file (e.g. dom.test.ts, state.test.ts) even when the task's real test is elsewhere (tests/index.html.test.ts). Task 43 had to add dummy test files by hand.",
+    "goal": [
+      "- A task that names tests/index.html.test.ts passes the check with no dom.test.ts or state.test.ts.",
+      "- The real-test fixture test passes.",
+      "- Task 43 passes RUN_TASK_TESTS without dom.test.ts or state.test.ts."
+    ],
+    "notInScope": [
+      "- Finding package.json inside a submodule; the submodule package.json task owns it."
+    ],
+    "problemSolvedByTask": "Guessed test names: The check guesses test file names from owned files and ignores the task's real test.",
+    "description": "requiredTestGroups in scripts/tackle-tasks/shared/writableFiles.ts builds test file candidates for every modifiableFiles entry through testFileCandidates in scripts/hooks/relatedTests.ts: tests/test-X.ts, tests/X.test.ts, and X.test.ts beside the source. runTaskTests in scripts/tackle-tasks/shared/runTaskTestsImpl.ts fails with 'the task declares tests but the branch lacks' when no candidate exists for any owned file. The task record has no field that names its test files; the tests field is prose only. So a task whose real test lives elsewhere must add dummy sibling test files to pass.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/shared/writableFiles.ts",
+      "scripts/hooks/relatedTests.ts",
+      "scripts/tackle-tasks/shared/runTaskTestsImpl.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "Make a task that owns dom.ts and state.ts, and names tests/index.html.test.ts as its test. The check passes with no dom.test.ts or state.test.ts.",
+    "difficulty": 5
   }
 ]
