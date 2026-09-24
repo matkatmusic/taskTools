@@ -428,5 +428,32 @@
     "hasTests": true,
     "tests": "Make a task that owns dom.ts and state.ts, and names tests/index.html.test.ts as its test. The check passes with no dom.test.ts or state.test.ts.",
     "difficulty": 5
+  },
+  {
+    "taskNumber": 266,
+    "version": "37ced9d02f6e4d24a4f4e1243681c9f4066c996c",
+    "title": "Design flaw: a task's file list cannot change after clarify",
+    "userDescription": "Design flaw that needs rethinking: clarify-task cannot widen a task's files once clarifyRequest is cleared, so a tracked build output (viewer.js) could not be added to task 43; it was committed by hand.",
+    "goal": [
+      "- The user approves a written design for how a task's file list changes after planning."
+    ],
+    "notInScope": [
+      "- The submodule package.json fix and the paired-test check fix; their own tasks own them."
+    ],
+    "problemSolvedByTask": "Needs rethink: How a task's file list gets set and changed needs a new design.",
+    "description": "clarifyTask in scripts/clarify-task/clarifyTask.ts throws 'has no clarifyRequest to answer' when task.clarifyRequest is missing, and it deletes clarifyRequest on success. The only code that widens a task's modifiableFiles sits behind that same guard. So once a clarify round has run, nothing can add a file to the task. On task 43, viewer.js, a tracked build output, had to be committed by hand. clarifyTaskBrief.ts and skills/clarify-task/SKILL.md treat clarifyTask.ts as the only sanctioned way to change a task's files.",
+    "modifiableFiles": [
+      "scripts/clarify-task/clarifyTask.ts",
+      "scripts/clarify-task/clarifyTaskBrief.ts",
+      "skills/clarify-task/SKILL.md",
+      "tests/clarifyTask.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 6
   }
 ]
