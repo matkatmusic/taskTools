@@ -386,11 +386,13 @@
       "- The paired-test check that guesses sibling test file names; the paired-test task owns it."
     ],
     "problemSolvedByTask": "Suite step fails: RUN_FULL_SUITE cannot run tests for a project whose package.json lives in a submodule.",
-    "description": "runSuite in scripts/shared/taskTestsRunner.ts requires package.json at the cwd it is given and throws otherwise. Both callers, runTaskTests in scripts/tackle-tasks/shared/runTaskTestsImpl.ts and scripts/hooks/taskTestsHook.ts, pass the top-level worktree path. Task 43's project keeps its package.json in the mermaid-editor submodule, so runSuite throws before any test runs. User ruling: keep it simple. When the given folder has no package.json, search its subfolders recursively for package.json and run the suite from the folder where it is found.",
+    "description": "User ruling 2026-09-24: add one script, scripts/shared/findPackageJson.ts, that returns the path to package.json, and make every source file that needs package.json use it. The caller gives a file (or folder); findPackageJson returns the closest package.json at or above it, stops at the repo root, and throws when it finds none. This answers which copy is meant when a project has several submodules, each with its own package.json. Two lookups exist today and both move to it: readPackageScripts in scripts/shared/testPolicy.ts (returns null on a missing or unparseable package.json, so runFullSuite silently counts the layer as passed) and runSuite in scripts/shared/taskTestsRunner.ts (throws when cwd has no package.json). RUN_FULL_SUITE calls runTaskTests in scripts/tackle-tasks/shared/runTaskTestsImpl.ts, which already groups changed test files per occurrence but then runs runSuite on the top worktree folder only; it must run the suite from the folder findPackageJson returns for the changed test files. taskTestsHook.ts and checkTestBaseline.ts pass a folder, and use the same lookup. Also in scope (user ruling): task worktrees have no node_modules, so a submodule suite fails even from the right folder; the worktree must get node_modules for each package.json the suite runs from.",
     "modifiableFiles": [
       "scripts/shared/taskTestsRunner.ts",
+      "scripts/shared/testPolicy.ts",
       "scripts/tackle-tasks/shared/runTaskTestsImpl.ts",
       "scripts/hooks/taskTestsHook.ts",
+      "scripts/shared/checkTestBaseline.ts",
       "tests/taskTestsRunner.test.ts"
     ],
     "readOnlyFiles": [
@@ -399,7 +401,11 @@
     "schemaVersion": "1.0.1",
     "hasTests": true,
     "tests": "Make a scratch repo whose package.json is only inside a submodule. Run the full test step. It finds the submodule package.json and runs its tests.",
-    "difficulty": 4
+    "difficulty": 4,
+    "createsFiles": [
+      "scripts/shared/findPackageJson.ts",
+      "tests/findPackageJson.test.ts"
+    ]
   },
   {
     "taskNumber": 265,
