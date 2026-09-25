@@ -20,6 +20,7 @@ import { generateSteps, resolveDiagramFolderSetting } from "./generateSteps.ts";
 import { generateWorkflow } from "./generateWorkflow.ts";
 import { resolveAgentOptions } from "./shared/resolveAgentOptions.ts";
 import { loadRepositoryManifest, initializeSubmodulesInWorktree, resolveTaskWorktreeConventionDirectory } from "../shared/prepareTasks.ts";
+import { ensureDependenciesInstalled } from "../shared/ensureDependenciesInstalled.ts";
 import { deleteTaskMergePersistence, removeTaskWorktreeAndBranches, findRecordedMergedCommit } from "../merge-worktree-tasks/mergeTaskWorktrees.ts";
 
 // These blocks read plans/plan.json, plans/codex-review.json, or a prompt file. Cleanup removes those with the worktree and nothing keeps a copy, so a resume there has no input to work from. The brief is the one file a reset can make again.
@@ -32,13 +33,16 @@ import { deleteTaskMergePersistence, removeTaskWorktreeAndBranches, findRecorded
 // A block name makes the next launch resume there instead of starting over. Returns the lines to say.
 export async function resetTask(taskNumber: number, block: string): Promise<string> {
   const lines: string[] = [];
-  if (!Number.isInteger(taskNumber) || taskNumber <= 0)
+  const isNotAPositiveInteger = !Number.isInteger(taskNumber) || taskNumber <= 0;
+  if (isNotAPositiveInteger)
     throw new Error("usage: resetTask <taskNumber> [<block>]");
-  const repoRoot = execSync("git rev-parse --show-toplevel").toString().trim();
+  const repoRootOutput = execSync("git rev-parse --show-toplevel").toString();
+  const repoRoot = repoRootOutput.trim();
   // The checkpoint's block is the full `<diagram>::<box>` key; the resume walk needs that, so a bare name gets resolved.
   const stepsConfigPath = join(taskWorkflowDirectory(resolveTaskFiles(repoRoot).tasksPath, taskNumber), "steps.json");
   // A run that failed before task 10 shipped has no per-task pair yet; regenerate one so reset stays usable.
-  if (!existsSync(stepsConfigPath)) {
+  const stepsConfigMissing = !existsSync(stepsConfigPath);
+  if (stepsConfigMissing) {
     mkdirSync(dirname(stepsConfigPath), { recursive: true });
     const diagramFolderSetting = resolveDiagramFolderSetting(repoRoot, false, "");
     generateSteps(diagramFolderSetting.diagramFolder, diagramFolderSetting.stepsRoot, stepsConfigPath, diagramFolderSetting.allowStubs);
@@ -56,7 +60,8 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
       }
     }
   }
-  if (block !== "" && stepKeysNamingBlock.length !== 1) {
+  const blockNamesTheWrongNumberOfSteps = block !== "" && stepKeysNamingBlock.length !== 1;
+  if (blockNamesTheWrongNumberOfSteps) {
     throw new Error(`block ${block} names ${stepKeysNamingBlock.length} steps in steps.json: ${stepKeysNamingBlock.join(", ")}`);
   }
   const stepKey = stepKeysNamingBlock[0] ?? "";
@@ -73,12 +78,22 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     }
   }
   const getStepKey = (boxReference: string, fromDiagram: string): string => {
-    if (boxReference.includes("::"))
+    const isFullyQualified = boxReference.includes("::");
+    if (isFullyQualified)
       return boxReference;
     const sameDiagramKey = `${fromDiagram}::${boxReference}`;
-    if (stepsByKey.has(sameDiagramKey))
+    const sameDiagramHasThisBox = stepsByKey.has(sameDiagramKey);
+    if (sameDiagramHasThisBox)
       return sameDiagramKey;
-    return [...stepsByKey.keys()].find((key) => key.slice(key.indexOf("::") + 2) === boxReference) ?? sameDiagramKey;
+    let matchedKey: string | undefined;
+    for (const key of stepsByKey.keys()) {
+      const namesThisBox = key.slice(key.indexOf("::") + 2) === boxReference;
+      if (namesThisBox) {
+        matchedKey = key;
+        break;
+      }
+    }
+    return matchedKey ?? sameDiagramKey;
   };
   const exitDiagrams = ["pipeline-failuresExit.mmd", "pipeline-mergeSucceededExit.mmd"];
   // RETIRED (task 223): the lock block is found by the takesSourceLock flag, not this literal.
@@ -103,10 +118,18 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
   while (toVisit.length > 0) {
     const visiting = toVisit.pop()!;
     const step = stepsByKey.get(visiting);
-    if (step === undefined || reachedFromLock.has(visiting) || exitDiagrams.includes(step.diagram))
+    const stepIsUnknown = step === undefined;
+    if (stepIsUnknown)
+      continue;
+    const alreadyReachedFromLock = reachedFromLock.has(visiting);
+    if (alreadyReachedFromLock)
+      continue;
+    const stepExitsThePipeline = exitDiagrams.includes(step.diagram);
+    if (stepExitsThePipeline)
       continue;
     reachedFromLock.add(visiting);
-    toVisit.push(...step.next.map((box) => getStepKey(box, step.diagram)));
+    for (const box of step.next)
+      toVisit.push(getStepKey(box, step.diagram));
   }
   // prepareResume re-takes the lock on the next launch when the checkpoint says it was held.
   const sourceLockHeld = reachedFromLock.has(stepKey);
@@ -135,10 +158,25 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
   const tasks = JSON.parse(readFileSync(tasksFile, "utf-8"));
   const completed = JSON.parse(readFileSync(completedFile, "utf-8"));
 
-  const openIndex = tasks.findIndex((t: any) => t.taskNumber === taskNumber);
-  const completedIndex = completed.findIndex((t: any) => t.taskNumber === taskNumber);
+  let openIndex = -1;
+  for (let index = 0; index < tasks.length; index++) {
+    const matchesThisTask = tasks[index].taskNumber === taskNumber;
+    if (matchesThisTask) {
+      openIndex = index;
+      break;
+    }
+  }
+  let completedIndex = -1;
+  for (let index = 0; index < completed.length; index++) {
+    const matchesThisTask = completed[index].taskNumber === taskNumber;
+    if (matchesThisTask) {
+      completedIndex = index;
+      break;
+    }
+  }
 
-  if (openIndex === -1 && completedIndex === -1)
+  const taskNotFoundAnywhere = openIndex === -1 && completedIndex === -1;
+  if (taskNotFoundAnywhere)
     throw new Error(`task ${taskNumber} not found in tasks.json or completedTasks.json`);
 
   // A merged task rewinds to its saved ref; an open task just clears local state.
@@ -161,19 +199,32 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
           throw new Error(`reset of task ${taskNumber} cannot run: no reset point in ${occurrence.checkoutPath}; reset it by hand`);
         const resetPoint = resetPointProbe.stdout.trim();
         resetPointByOccurrence.set(occurrence.occurrenceId, resetPoint);
-        const stagingTip = execSync("git rev-parse staging", { cwd: occurrence.checkoutPath }).toString().trim();
+        const stagingTipOutput = execSync("git rev-parse staging", { cwd: occurrence.checkoutPath }).toString();
+        const stagingTip = stagingTipOutput.trim();
         if (stagingTip === resetPoint)
           continue;
         const firstParentProbe = spawnSync("git", ["-C", occurrence.checkoutPath, "rev-parse", "--verify", "--quiet", `${stagingTip}^1`], { encoding: "utf8" });
         const secondParentProbe = spawnSync("git", ["-C", occurrence.checkoutPath, "rev-parse", "--verify", "--quiet", `${stagingTip}^2`], { encoding: "utf8" });
-        if (secondParentProbe.status === 0 && firstParentProbe.stdout.trim() === resetPoint)
+        const stagingTipIsAMergeOfThisResetPoint = secondParentProbe.status === 0 && firstParentProbe.stdout.trim() === resetPoint;
+        if (stagingTipIsAMergeOfThisResetPoint)
           continue;
         if (occurrence.occurrenceId === "") {
           // Merges on staging's first-parent line after this task's reset point, newest first, minus this task itself.
-          const mergesAfter = execSync(`git rev-list --first-parent staging ^${resetPoint}`, { cwd: occurrence.checkoutPath }).toString().trim().split("\n").filter(Boolean);
-          const tasksAfter = mergesAfter
-            .map((hash) => completed.find((t: any) => t.commitHashes?.[t.commitHashes.length - 1] === hash)?.taskNumber)
-            .filter((n) => n !== undefined && n !== taskNumber);
+          const mergesAfterOutput = execSync(`git rev-list --first-parent staging ^${resetPoint}`, { cwd: occurrence.checkoutPath }).toString().trim();
+          const mergesAfter: string[] = [];
+          for (const hash of mergesAfterOutput.split("\n")) {
+            const isBlank = hash === "";
+            if (!isBlank)
+              mergesAfter.push(hash);
+          }
+          const tasksAfter: number[] = [];
+          for (const hash of mergesAfter) {
+            const mergeRecord = completed.find((t: any) => t.commitHashes?.[t.commitHashes.length - 1] === hash);
+            const taskAfterNumber = mergeRecord?.taskNumber;
+            const isAnotherTask = taskAfterNumber !== undefined && taskAfterNumber !== taskNumber;
+            if (isAnotherTask)
+              tasksAfter.push(taskAfterNumber);
+          }
           throw new Error(`reset of ${taskNumber} blocked. reset ${tasksAfter.join(", ")} first to unblock`);
         }
         throw new Error(`reset of ${taskNumber} blocked in ${occurrence.checkoutPath}; a later merge sits on its reset point`);
@@ -195,7 +246,8 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     const taskRecord = openIndex !== -1 ? tasks[openIndex] : completed[completedIndex];
     runId = taskRecord.run.history[taskRecord.run.history.length - 1].runId;
     const isOpenTask = openIndex !== -1;
-    if (isOpenTask && !existsSync(worktreePath))
+    const openTaskMissingItsWorktree = isOpenTask && !existsSync(worktreePath);
+    if (openTaskMissingItsWorktree)
       throw new Error(`task ${taskNumber} has no worktree at ${worktreePath}; a reset to a block needs one`);
 
     // The block's input is the quoted argument of its newest packet this run, like resumeRun.ts findStartAtBlockEntry.
@@ -204,10 +256,12 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     let newestInput: string | null = null;
     for (const stampEntry of existsSync(runsDirectory) ? readdirSync(runsDirectory) : []) {
       const packetsFolder = join(runsDirectory, stampEntry, "packets");
-      if (!existsSync(packetsFolder))
+      const packetsFolderMissing = !existsSync(packetsFolder);
+      if (packetsFolderMissing)
         continue;
       for (const packetName of readdirSync(packetsFolder)) {
-        if (!packetNamePattern.test(packetName))
+        const packetNameDoesNotMatch = !packetNamePattern.test(packetName);
+        if (packetNameDoesNotMatch)
           continue;
         const packetPath = join(packetsFolder, packetName);
         const packetJson = JSON.parse(readFileSync(packetPath, "utf-8"));
@@ -218,7 +272,8 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
         let raw = "";
         let charIndex = quoteStart + 1;
         while (charIndex < commandLine.length) {
-          if (commandLine.slice(charIndex, charIndex + 4) === `'\\''`) {
+          const isEscapedQuote = commandLine.slice(charIndex, charIndex + 4) === `'\\''`;
+          if (isEscapedQuote) {
             raw += "'";
             charIndex += 4;
             continue;
@@ -228,7 +283,8 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
           raw += commandLine[charIndex];
           charIndex += 1;
         }
-        if (JSON.parse(raw).runId !== runId)
+        const packetIsForADifferentRun = JSON.parse(raw).runId !== runId;
+        if (packetIsForADifferentRun)
           continue;
         const mtimeMs = statSync(packetPath).mtimeMs;
         if (mtimeMs <= newestMtimeMs)
@@ -254,32 +310,49 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     }
     catch { /* already gone */ }
   }
-  if (block === "" || scope.worktree === true) {
-    if (existsSync(leasePath))
+  const shouldRemoveTheLease = block === "" || scope.worktree === true;
+  if (shouldRemoveTheLease) {
+    const leaseExists = existsSync(leasePath);
+    if (leaseExists)
       rmSync(leasePath);
   }
   execSync("git worktree prune", { cwd: repoRoot, stdio: "pipe" });
 
   for (const f of [".git/taskTools-source.lock", ".git/taskTools-source.lock.mutation-guard"]) {
     const p = join(repoRoot, f);
-    if (existsSync(p))
+    const fileExists = existsSync(p);
+    if (fileExists)
       rmSync(p);
   }
   // for (const entry of existsSync(join(repoRoot, ".taskTools", "runs")) ? readdirSync(join(repoRoot, ".taskTools", "runs")) : []) {
   //     rmSync(join(repoRoot, ".taskTools", "runs", entry, "packets"), { recursive: true, force: true });
   // }
   // Only this task's run directories go: each packet JSON names its taskNumber.
-  for (const runDirectory of existsSync(runsDirectory) ? readdirSync(runsDirectory).map((entry) => join(runsDirectory, entry)) : []) {
+  const runDirectories: string[] = [];
+  if (existsSync(runsDirectory)) {
+    for (const entry of readdirSync(runsDirectory))
+      runDirectories.push(join(runsDirectory, entry));
+  }
+  for (const runDirectory of runDirectories) {
     const packetsDirectory = join(runDirectory, "packets");
-    if (!existsSync(packetsDirectory))
+    const packetsDirectoryMissing = !existsSync(packetsDirectory);
+    if (packetsDirectoryMissing)
       continue;
-    const packetNamesThisTask = readdirSync(packetsDirectory)
-      .some((packetFile) => {
-        const packet = readJsonFile(join(packetsDirectory, packetFile)) as { taskNumber?: number; output?: { result?: { taskNumber?: number } } };
-        return packet.taskNumber === taskNumber || packet.output?.result?.taskNumber === taskNumber;
-      });
+    let packetNamesThisTask = false;
+    for (const packetFile of readdirSync(packetsDirectory)) {
+      const isJsonFile = packetFile.endsWith(".json");
+      if (!isJsonFile)
+        continue;
+      const packet = readJsonFile(join(packetsDirectory, packetFile)) as { taskNumber?: number; output?: { result?: { taskNumber?: number } } };
+      const matchesThisTask = packet.taskNumber === taskNumber || packet.output?.result?.taskNumber === taskNumber;
+      if (matchesThisTask) {
+        packetNamesThisTask = true;
+        break;
+      }
+    }
     // A reset to a block reads the block's input from these packets, so they stay.
-    if (packetNamesThisTask && block === "")
+    const shouldRemoveThisRunDirectory = packetNamesThisTask && block === "";
+    if (shouldRemoveThisRunDirectory)
       rmSync(runDirectory, { recursive: true, force: true });
   }
   if (block === "") {
@@ -287,7 +360,8 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     // try { execSync(`git update-ref -d refs/taskTools/merged-commits/${branchName}`, { cwd: repoRoot, stdio: "pipe" }); } catch { /* never merged */ }
     const agentsDirectory = join(repoRoot, ".claude", "agents");
     for (const agentFile of existsSync(agentsDirectory) ? readdirSync(agentsDirectory) : []) {
-      if (agentFile.startsWith(`task-${taskNumber}-`) && agentFile.endsWith(".md"))
+      const isThisTasksAgentFile = agentFile.startsWith(`task-${taskNumber}-`) && agentFile.endsWith(".md");
+      if (isThisTasksAgentFile)
         rmSync(join(agentsDirectory, agentFile));
     }
   }
@@ -298,7 +372,8 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
       for (const occurrence of occurrencesDeepestFirst!) {
         const resetPoint = resetPointByOccurrence!.get(occurrence.occurrenceId)!;
         const stagingCheckout = join(stagingWorktreePath(repoRoot), occurrence.occurrenceId);
-        if (existsSync(join(stagingCheckout, ".git"))) {
+        const stagingIsCheckedOut = existsSync(join(stagingCheckout, ".git"));
+        if (stagingIsCheckedOut) {
           execSync(`git reset --hard ${resetPoint}`, { cwd: stagingCheckout, stdio: "pipe" });
         }
         else {
@@ -308,9 +383,12 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     }
     for (const occurrence of occurrencesDeepestFirst!)
       deleteTaskMergePersistence(occurrence.checkoutPath, branchName);
-    const sourceSubmodules = manifest!.occurrences
-      .filter((occurrence) => occurrence.occurrenceId !== "")
-      .map((occurrence) => ({ checkoutPath: occurrence.checkoutPath, depth: occurrence.depth }));
+    const sourceSubmodules: { checkoutPath: string; depth: number }[] = [];
+    for (const occurrence of manifest!.occurrences) {
+      const isSubmodule = occurrence.occurrenceId !== "";
+      if (isSubmodule)
+        sourceSubmodules.push({ checkoutPath: occurrence.checkoutPath, depth: occurrence.depth });
+    }
     removeTaskWorktreeAndBranches(repoRoot, worktreePath, branchName, sourceSubmodules);
     for (const occurrence of manifest!.occurrences) {
       execSync(`git update-ref -d ${resetPointRef}`, { cwd: occurrence.checkoutPath, stdio: "pipe" });
@@ -321,7 +399,8 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     const entry = completed[completedIndex];
     const workCommit = entry.commitHashes?.[0];
     const mergeCommit = entry.commitHashes?.[entry.commitHashes.length - 1];
-    if (!workCommit || !mergeCommit)
+    const missingCommitHashes = !workCommit || !mergeCommit;
+    if (missingCommitHashes)
       throw new Error(`task ${taskNumber}'s completedTasks.json entry has no commitHashes; can't compute a reset point`);
     // retired: the occurrence walk above now guards and resets staging in every repo, root included.
     // const foundBranch = execSync("git rev-parse --abbrev-ref HEAD", { cwd: repoRoot }).toString().trim();
@@ -368,7 +447,14 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
 
       // Populate worktree submodules, then put each on task-N at the commit its own merge record names.
       initializeSubmodulesInWorktree(worktreePath);
-      const submoduleOccurrences = loadRepositoryManifest(repoRoot, "staging").occurrences.filter((occurrence) => occurrence.occurrenceId !== "");
+      ensureDependenciesInstalled(worktreePath);
+      const stagingManifest = loadRepositoryManifest(repoRoot, "staging");
+      const submoduleOccurrences: ReturnType<typeof loadRepositoryManifest>["occurrences"] = [];
+      for (const occurrence of stagingManifest.occurrences) {
+        const isSubmodule = occurrence.occurrenceId !== "";
+        if (isSubmodule)
+          submoduleOccurrences.push(occurrence);
+      }
       for (const occurrence of submoduleOccurrences) {
         const worktreeSubmodulePath = join(worktreePath, occurrence.occurrenceId);
         const mergeHash = findRecordedMergedCommit(occurrence.checkoutPath, branchName);
@@ -387,7 +473,14 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     // tasks.json is shared with running tasks; mutate it only under the state lock, like every other writer.
     withTaskStateLock(tasksFile, () => {
       const freshTasks = JSON.parse(readFileSync(tasksFile, "utf-8"));
-      const freshIndex = freshTasks.findIndex((t: any) => t.taskNumber === taskNumber);
+      let freshIndex = -1;
+      for (let index = 0; index < freshTasks.length; index++) {
+        const matchesThisTask = freshTasks[index].taskNumber === taskNumber;
+        if (matchesThisTask) {
+          freshIndex = index;
+          break;
+        }
+      }
       const { run, codexReviewNotes, planReviewCount, clarifyRequest, ...restored } = freshTasks[freshIndex];
       if (block === "")
         freshTasks[freshIndex] = restored;
@@ -401,15 +494,24 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
   if (block !== "") {
     if (scope.counters === true)
       resetAttemptCounts(taskNumber, runId, repoRoot);
-    if (!existsSync(worktreePath))
+    const worktreeMissing = !existsSync(worktreePath);
+    if (worktreeMissing)
       throw new Error(`task ${taskNumber} has no worktree at ${worktreePath}; a reset to a block needs one`);
     // retired: rewindPoints restore below repoints every repo, replacing this plain checkout.
     // for (const path of submodulePaths(worktreePath, currentBranchName(worktreePath))) {
     //     execSync(`git checkout ${branchName}`, { cwd: join(worktreePath, path), stdio: "pipe" });
     // }
 
-    // A worktree re-made by plain `git worktree add` has empty submodule folders; git would then run in the parent repo.
-    const hasEmptySubmodule = execFileSync("git", ["-C", worktreePath, "submodule", "status", "--recursive"], { encoding: "utf8" }).split("\n").some((line) => line.startsWith("-"));
+    // A plain `git worktree add` leaves submodule folders empty.
+    const submoduleStatusLines = execFileSync("git", ["-C", worktreePath, "submodule", "status", "--recursive"], { encoding: "utf8" }).split("\n");
+    let hasEmptySubmodule = false;
+    for (const line of submoduleStatusLines) {
+      const isUninitialized = line.startsWith("-");
+      if (isUninitialized) {
+        hasEmptySubmodule = true;
+        break;
+      }
+    }
     if (hasEmptySubmodule)
       initializeSubmodulesInWorktree(worktreePath);
     // Deepest submodule path first, root ("") last: task-N is already checked out at the root.
@@ -427,10 +529,14 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
         const skipWorktreeContents = new Map<string, Buffer>();
         for (const skipWorktreePath of skipWorktreePaths) {
           const fullPath = join(path, skipWorktreePath);
-          if (existsSync(fullPath))
+          const fullPathExists = existsSync(fullPath);
+          if (fullPathExists)
             skipWorktreeContents.set(skipWorktreePath, readFileSync(fullPath));
         }
-        execSync(`git update-index --no-skip-worktree -- ${skipWorktreePaths.map((p) => `"${p}"`).join(" ")}`, { cwd: path, stdio: "pipe" });
+        const quotedSkipWorktreePaths: string[] = [];
+        for (const skipWorktreePath of skipWorktreePaths)
+          quotedSkipWorktreePaths.push(`"${skipWorktreePath}"`);
+        execSync(`git update-index --no-skip-worktree -- ${quotedSkipWorktreePaths.join(" ")}`, { cwd: path, stdio: "pipe" });
         execSync(`git reset --hard ${oid}`, { cwd: path, stdio: "pipe" });
         for (const [skipWorktreePath, content] of skipWorktreeContents)
           writeFileSync(join(path, skipWorktreePath), content);
@@ -442,16 +548,48 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     }
 
     // A rewound commit is gone from the branch; drop its record so the next commit block commits again.
-    const priorCommits = JSON.parse(readFileSync(tasksFile, "utf-8")).find((t: any) => t.taskNumber === taskNumber).run.history.at(-1).commits;
-    const survivingHashes = new Set(priorCommits.filter((commit: { occurrenceId: string; hash: string }) => {
-      const path = commit.occurrenceId === "" ? worktreePath : join(worktreePath, commit.occurrenceId);
-      return spawnSync("git", ["-C", path, "merge-base", "--is-ancestor", commit.hash, "HEAD"]).status === 0;
-    }).map((commit: { hash: string }) => commit.hash));
+    const tasksFileContents = JSON.parse(readFileSync(tasksFile, "utf-8"));
+    let priorTaskRecord: any;
+    for (const t of tasksFileContents) {
+      const matchesThisTask = t.taskNumber === taskNumber;
+      if (matchesThisTask) {
+        priorTaskRecord = t;
+        break;
+      }
+    }
+    const priorCommits = priorTaskRecord.run.history.at(-1).commits;
+    const survivingHashes = new Set<string>();
+    for (const commit of priorCommits as { occurrenceId: string; hash: string }[]) {
+      const isRootOccurrence = commit.occurrenceId === "";
+      let path: string;
+      if (isRootOccurrence) {
+        path = worktreePath;
+      } else {
+        path = join(worktreePath, commit.occurrenceId);
+      }
+      const isStillAnAncestor = spawnSync("git", ["-C", path, "merge-base", "--is-ancestor", commit.hash, "HEAD"]).status === 0;
+      if (isStillAnAncestor)
+        survivingHashes.add(commit.hash);
+    }
     // tasks.json is shared with running tasks; mutate it only under the state lock, like every other writer.
     withTaskStateLock(tasksFile, () => {
       const freshTasks = JSON.parse(readFileSync(tasksFile, "utf-8"));
-      const freshRun = freshTasks.find((t: any) => t.taskNumber === taskNumber).run.history.at(-1);
-      freshRun.commits = freshRun.commits.filter((commit: { hash: string }) => survivingHashes.has(commit.hash));
+      let freshTaskRecord: any;
+      for (const t of freshTasks) {
+        const matchesThisTask = t.taskNumber === taskNumber;
+        if (matchesThisTask) {
+          freshTaskRecord = t;
+          break;
+        }
+      }
+      const freshRun = freshTaskRecord.run.history.at(-1);
+      const survivingCommits: { hash: string }[] = [];
+      for (const commit of freshRun.commits as { hash: string }[]) {
+        const survived = survivingHashes.has(commit.hash);
+        if (survived)
+          survivingCommits.push(commit);
+      }
+      freshRun.commits = survivingCommits;
       writeJsonAtomically(tasksFile, freshTasks);
     });
 
@@ -464,9 +602,11 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
           rmSync(join(plansFolder, file), { force: true });
         if (file === "test-review.json")
           rmSync(join(plansFolder, file), { force: true });
-        if (file.startsWith("PLAN_THE_TASK."))
+        const isPlanFile = file.startsWith("PLAN_THE_TASK.");
+        if (isPlanFile)
           rmSync(join(plansFolder, file), { force: true });
-        if (file.endsWith(".prompt.md"))
+        const isPromptFile = file.endsWith(".prompt.md");
+        if (isPromptFile)
           rmSync(join(plansFolder, file), { force: true });
       }
     }
@@ -474,7 +614,8 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     writeFileSync(leasePath, JSON.stringify({ pid: process.pid, runId }));
     // A repo with no "staging" branch at all (e.g. a minimal fixture) has nothing to rebase onto.
     const stagingExists = spawnSync("git", ["-C", worktreePath, "rev-parse", "--verify", "--quiet", "staging"], { stdio: "ignore" }).status === 0;
-    if (!stagingExists || isStagingAncestorOfWorktree(worktreePath)) {
+    const shouldResumeWithoutRebasing = !stagingExists || isStagingAncestorOfWorktree(worktreePath);
+    if (shouldResumeWithoutRebasing) {
       writeCheckpoint(worktreePath, {
         taskNumber, passId: randomUUID(), runId, projectRoot: repoRoot,
         block: stepKey, input, state: "running", sourceLockHeld, exitType: "", exitNote: "", resumedFrom: null,
@@ -526,7 +667,12 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
       }
     }
     const generatorInputPaths = [...generatorInputFiles, ...diagramFolderInputPaths];
-    const newestInputMtimeMs = Math.max(...generatorInputPaths.map((path) => statSync(path).mtimeMs));
+    let newestInputMtimeMs = -Infinity;
+    for (const path of generatorInputPaths) {
+      const mtimeMs = statSync(path).mtimeMs;
+      if (mtimeMs > newestInputMtimeMs)
+        newestInputMtimeMs = mtimeMs;
+    }
     const generatedFilesAreFresh = existsSync(stepsConfigPath) && existsSync(workflowFile)
         && statSync(stepsConfigPath).mtimeMs >= newestInputMtimeMs && statSync(workflowFile).mtimeMs >= newestInputMtimeMs;
     if (generatedFilesAreFresh) {
@@ -546,5 +692,6 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.
-if (realpathSync(process.argv[1]!) === realpathSync(fileURLToPath(import.meta.url)))
+const isRunAsAScript = realpathSync(process.argv[1]!) === realpathSync(fileURLToPath(import.meta.url));
+if (isRunAsAScript)
   console.log(await resetTask(Number(process.argv[2]), process.argv[3] ?? ""));

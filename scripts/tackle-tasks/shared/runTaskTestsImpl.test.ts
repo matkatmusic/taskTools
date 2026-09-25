@@ -205,29 +205,30 @@ test("test_runTaskTests_reportsMissingTestsWhenTheTaskDeclaresTestsAndTheBranchA
     assert.equal(result.output, "the task declares tests but the branch lacks: ");
 });
 
-// A test file exists, but not the one paired with the owned file: still missing.
-test("test_runTaskTests_reportsMissingTestsWhenAnOwnedFilesPairedTestIsAbsent", async () => {
-    const rootOrigin = makeTempRepoWithCommit("main");
-    const worktreePath = createLinkedWorktree(rootOrigin);
-    seedOpenTaskAndClaim(rootOrigin, 1, { tests: "add a test for the widget", modifiableFiles: ["src/thing.ts"] });
-    mkdirSync(join(worktreePath, "tests"), { recursive: true });
-    writeFileSync(join(worktreePath, "tests", "wrong-name.test.ts"), "");
-    git(worktreePath, "add", "tests/wrong-name.test.ts");
-    git(worktreePath, "commit", "-m", "wrong test name");
-
-    const result = await runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin);
-
-    assert.equal(result.missingTests, true);
-    assert.equal(result.passed, false);
-    assert.equal(
-        result.output,
-        `the task declares tests but the branch lacks: ${[
-            join(worktreePath, "tests", "test-thing.ts"),
-            join(worktreePath, "tests", "thing.test.ts"),
-            join(worktreePath, "src", "thing.test.ts"),
-        ].join(" or ")}`,
-    );
-});
+// User ruling 2026-09-24: the guessed-paired-test-name gate is retired. A test file exists, so the
+// step no longer fails just because it doesn't match a guessed sibling name for the owned file.
+// test("test_runTaskTests_reportsMissingTestsWhenAnOwnedFilesPairedTestIsAbsent", async () => {
+//     const rootOrigin = makeTempRepoWithCommit("main");
+//     const worktreePath = createLinkedWorktree(rootOrigin);
+//     seedOpenTaskAndClaim(rootOrigin, 1, { tests: "add a test for the widget", modifiableFiles: ["src/thing.ts"] });
+//     mkdirSync(join(worktreePath, "tests"), { recursive: true });
+//     writeFileSync(join(worktreePath, "tests", "wrong-name.test.ts"), "");
+//     git(worktreePath, "add", "tests/wrong-name.test.ts");
+//     git(worktreePath, "commit", "-m", "wrong test name");
+//
+//     const result = await runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin);
+//
+//     assert.equal(result.missingTests, true);
+//     assert.equal(result.passed, false);
+//     assert.equal(
+//         result.output,
+//         `the task declares tests but the branch lacks: ${[
+//             join(worktreePath, "tests", "test-thing.ts"),
+//             join(worktreePath, "tests", "thing.test.ts"),
+//             join(worktreePath, "src", "thing.test.ts"),
+//         ].join(" or ")}`,
+//     );
+// });
 
 // A co-located test next to the owned file, not under tests/, still satisfies the requirement.
 test("test_runTaskTests_aCoLocatedTestSatisfiesAnOwnedFilesPairedTestRequirement", async () => {

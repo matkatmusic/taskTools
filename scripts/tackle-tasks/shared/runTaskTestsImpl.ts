@@ -1,5 +1,6 @@
 // Implements pipeline-taskTests.mmd: diffs each occurrence's branch against its own baseRef, deepest first, to run node --test on touched tests.
 import { execFileSync } from "node:child_process";
+import { join } from "node:path";
 import { getOccurrencesDeepestFirst, buildOccurrencePath } from "./occurrences.ts";
 import { getLocalIsoTimestamp, updateCurrentTaskRun } from "./taskRunState.ts";
 import { readTaskFile, resolveTaskFiles, taskHasTests } from "../../shared/taskFiles.ts";
@@ -9,6 +10,7 @@ import { modifiableFiles } from "../../shared/prepareTasks.ts";
 import { requiredTestGroups, taskDeclaresTests as ownerTaskDeclaresTests } from "./writableFiles.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 import { runSuite, parseFailingTests, readKnownFailingTests, newFailingTests, judgeSuite, SUITE_TIMEOUT_MS, type FailingTest } from "../../shared/taskTestsRunner.ts";
+import { ensureDependenciesInstalled } from "../../shared/ensureDependenciesInstalled.ts";
 
 const MAX_OUTPUT_LENGTH = 8000;
 // const TEST_FILE_PATTERN = /^tests\/.*\.test\.ts$/;
@@ -107,8 +109,16 @@ export async function runTaskTests(
 
   for (const occurrence of occurrences) {
     const changes = diffNameStatus(occurrence.checkoutPath, occurrence.baseRef);
-    const runnable = changes.filter((change) => isTestPath(change.runnablePath));
-    const deleted = changes.filter((change) => change.kind === "D" && isTestPath(change.oldPath));
+    const runnable: DiffChange[] = [];
+    const deleted: DiffChange[] = [];
+    for (const change of changes) {
+      const isRunnableTestChange = isTestPath(change.runnablePath);
+      const isDeletedTestChange = change.kind === "D" && isTestPath(change.oldPath);
+      if (isRunnableTestChange)
+        runnable.push(change);
+      if (isDeletedTestChange)
+        deleted.push(change);
+    }
     if (runnable.length > 0) {
       relativeTestFilesByOccurrenceId.set(occurrence.occurrenceId, runnable.map((change) => change.runnablePath!));
     }
@@ -126,12 +136,13 @@ export async function runTaskTests(
   const { tasksPath } = resolveTaskFiles(projectRoot);
   const task = readTaskFile(tasksPath).find((candidate) => candidate.taskNumber === taskNumber);
   const taskDeclaresTests = task !== undefined && ownerTaskDeclaresTests(task);
-  // Every owned file's test group must have at least one candidate on disk.
-  const absentPairedTests = taskDeclaresTests
-    ? requiredTestGroups(task!)
-      .filter((group) => !group.candidates.some((candidate) => existsSync(`${worktreePath}/${candidate}`)))
-      .map((group) => group.candidates.map((candidate) => `${worktreePath}/${candidate}`).join(" or "))
-    : [];
+  // User ruling 2026-09-24: guessed sibling test names no longer fail the step.
+  // const absentPairedTests = taskDeclaresTests
+  //   ? requiredTestGroups(task!)
+  //     .filter((group) => !group.candidates.some((candidate) => existsSync(`${worktreePath}/${candidate}`)))
+  //     .map((group) => group.candidates.map((candidate) => `${worktreePath}/${candidate}`).join(" or "))
+  //   : [];
+  const absentPairedTests: string[] = [];
 
   let passed: boolean;
   let missingTests: boolean;
@@ -146,8 +157,20 @@ export async function runTaskTests(
   }
   else {
     missingTests = false;
-    // ponytail: runs the top-level worktree's suite only; submodule suites are not run here.
-    const suite = await runSuite(worktreePath, timeoutMs);
+    // const suite = await runSuite(worktreePath, timeoutMs);
+    await ensureDependenciesInstalled(worktreePath);
+    const suiteRuns = [];
+    for (const [occurrenceId, files] of relativeTestFilesByOccurrenceId) {
+      const occurrence = occurrences.find((candidate) => candidate.occurrenceId === occurrenceId)!;
+      const absoluteTestFile = join(occurrence.checkoutPath, files[0]);
+      suiteRuns.push(await runSuite(absoluteTestFile, timeoutMs));
+    }
+    const suite = {
+      allPassing: suiteRuns.every((run) => run.allPassing),
+      timedOut: suiteRuns.some((run) => run.timedOut),
+      output: suiteRuns.map((run) => run.output).join("\n"),
+      log: suiteRuns.map((run) => run.log).join("\n"),
+    };
     const failing = suite.allPassing ? [] : parseFailingTests(suite.log);
     const known = readKnownFailingTests(projectRoot);
     const newFailures = newFailingTests(failing, known);

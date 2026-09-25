@@ -13,6 +13,7 @@ import { collectRepositorySources, createBranchInEveryRepository, currentBranchN
 import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
 import { ORIGIN_REMOTE_ABSENT, ORIGIN_REMOTE_PRESENT, WORKTREE_HOLDS_NO_RETAINED_WORK, WORKTREE_HOLDS_RETAINED_WORK } from "./resultCodes.ts";
 import { mergeHeadIntoStaging } from "./mergeHelpers.ts";
+import { ensureDependenciesInstalled } from "./ensureDependenciesInstalled.ts";
 
 export type PreparedTask = {
     number: number;
@@ -612,6 +613,7 @@ export function createWorktreeForGroup(repoRoot: string, group: TaskGroup, runId
     // A submodule-init or branch-creation failure gets the same treatment: release, don't orphan.
     try {
         initializeSubmodulesInWorktree(worktreePath);
+        ensureDependenciesInstalled(worktreePath);
         if (submoduleTaskBranchesHoldRetainedWork(worktreePath, branchName) === WORKTREE_HOLDS_RETAINED_WORK) {
             throw new Error(
                 `worktree at "${worktreePath}" holds retained work on a submodule task branch; `

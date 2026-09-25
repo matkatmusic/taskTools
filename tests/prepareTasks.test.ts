@@ -806,8 +806,26 @@ test("test_loadPreparedTaskThrowsWhenAHandoffFileIsMissingOnDisk", () => {
     );
 });
 
-test("test_loadPreparedTaskThrowsWhenAnOwnedFileIsMissingOnDiskAndNotListedInCreatesFiles", () => {
-    // This fails before any planner runs; the error names the missing file and the createsFiles fix.
+// User ruling: no pipeline failures for nitpicks like a file missing from the plan. A modifiableFiles
+// entry missing on disk and not on staging is now treated as a file the task creates, not an error.
+// test("test_loadPreparedTaskThrowsWhenAnOwnedFileIsMissingOnDiskAndNotListedInCreatesFiles", () => {
+//     // This fails before any planner runs; the error names the missing file and the createsFiles fix.
+//     const repoRoot = makeTempRepoWithCommit();
+//     const taskDirectory = join(repoRoot, ".taskTools");
+//     mkdirSync(taskDirectory, { recursive: true });
+//     const task = { taskNumber: 2, title: "t2", description: "desc", modifiableFiles: ["index.html"], readOnlyFiles: ["*"] };
+//     writeFileSync(join(taskDirectory, "tasks.json"), JSON.stringify([task]));
+//     writeFileSync(join(taskDirectory, "completedTasks.json"), "[]\n");
+//     writeTaskBriefFile(task, repoRoot);
+//     // Verification: the run stops before any planner launches, naming the file and the createsFiles fix.
+//     assert.throws(
+//         () => loadPreparedTask(2, repoRoot, repoRoot),
+//         /task 2: modifiableFiles names .*index\.html but the file does not exist.*"createsFiles"/,
+//     );
+// });
+
+test("test_loadPreparedTaskDoesNotThrowWhenAnOwnedFileIsMissingOnDiskAndNotListedInCreatesFiles", () => {
+    // A modifiableFiles entry missing on disk and not listed in createsFiles no longer fails the run.
     const repoRoot = makeTempRepoWithCommit();
     const taskDirectory = join(repoRoot, ".taskTools");
     mkdirSync(taskDirectory, { recursive: true });
@@ -815,11 +833,7 @@ test("test_loadPreparedTaskThrowsWhenAnOwnedFileIsMissingOnDiskAndNotListedInCre
     writeFileSync(join(taskDirectory, "tasks.json"), JSON.stringify([task]));
     writeFileSync(join(taskDirectory, "completedTasks.json"), "[]\n");
     writeTaskBriefFile(task, repoRoot);
-    // Verification: the run stops before any planner launches, naming the file and the createsFiles fix.
-    assert.throws(
-        () => loadPreparedTask(2, repoRoot, repoRoot),
-        /task 2: modifiableFiles names .*index\.html but the file does not exist.*"createsFiles"/,
-    );
+    assert.doesNotThrow(() => loadPreparedTask(2, repoRoot, repoRoot));
 });
 
 test("test_loadPreparedTaskDoesNotThrowWhenAnOwnedFileIsGoneFromDiskButStillOnStaging", () => {

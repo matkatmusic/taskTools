@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./UPDATE_TASKS_JSON.ts";
-import { claimTask, getAttemptCount } from "../shared/taskRunState.ts";
+import { claimTask, getAttemptCount, raiseAttemptCount } from "../shared/taskRunState.ts";
 import { writeCheckpoint, type Checkpoint } from "../shared/checkpoint.ts";
 
 function makeFixture(): string {
@@ -34,25 +34,28 @@ function packet(projectRoot: string, notes: string) {
     };
 }
 
-test("test_main_writesTheNotesAndRaisesThePlanReviewCounterToOne", () => {
+test("test_main_writesTheNotesAndResetsThePlanReviewCounterToZero", () => {
     const projectRoot = makeFixture();
     seedCheckpoint(projectRoot, "pass-0");
+    raiseAttemptCount(42, "run-1", "planReview", "pass-0", projectRoot);
     const output = main(JSON.stringify(packet(projectRoot, "fix the thing")));
     assert.equal(output.box, "UPDATE_TASKS_JSON");
     const tasks = JSON.parse(readFileSync(join(projectRoot, "tasks.json"), "utf8"));
     assert.equal(tasks[0].codexReviewNotes, "fix the thing");
-    assert.equal(getAttemptCount(42, "planReview", projectRoot), 1);
+    assert.equal(getAttemptCount(42, "planReview", projectRoot), 0);
 });
 
-test("test_main_raisesTheCounterByOneOnASecondCall", () => {
+test("test_main_resetsTheCounterOnASecondCallToo", () => {
     const projectRoot = makeFixture();
     seedCheckpoint(projectRoot, "pass-0");
+    raiseAttemptCount(42, "run-1", "planReview", "pass-0", projectRoot);
     main(JSON.stringify(packet(projectRoot, "first pass")));
     seedCheckpoint(projectRoot, "pass-1");
+    raiseAttemptCount(42, "run-1", "planReview", "pass-1", projectRoot);
     main(JSON.stringify(packet(projectRoot, "second pass")));
     const tasks = JSON.parse(readFileSync(join(projectRoot, "tasks.json"), "utf8"));
     assert.equal(tasks[0].codexReviewNotes, "second pass");
-    assert.equal(getAttemptCount(42, "planReview", projectRoot), 2);
+    assert.equal(getAttemptCount(42, "planReview", projectRoot), 0);
 });
 
 test("test_main_throwsWhenTheTaskIsNotInTasksJson", () => {
@@ -69,15 +72,17 @@ test("test_main_carriesRunIdAndBranchForward", () => {
     assert.equal(output.branch, "main");
 });
 
-test("test_UPDATE_TASKS_JSON_countsOnceWhenRunTwiceWithTheSameCheckpoint", () => {
-    const projectRoot = makeFixture();
-    seedCheckpoint(projectRoot, "pass-1");
-    main(JSON.stringify(packet(projectRoot, "fix the thing")));
-    main(JSON.stringify(packet(projectRoot, "fix the thing")));
-    assert.equal(getAttemptCount(42, "planReview", projectRoot), 1);
-});
+// UPDATE_TASKS_JSON no longer reads the checkpoint, so per-pass counting no longer applies.
+// test("test_UPDATE_TASKS_JSON_countsOnceWhenRunTwiceWithTheSameCheckpoint", () => {
+//     const projectRoot = makeFixture();
+//     seedCheckpoint(projectRoot, "pass-1");
+//     main(JSON.stringify(packet(projectRoot, "fix the thing")));
+//     main(JSON.stringify(packet(projectRoot, "fix the thing")));
+//     assert.equal(getAttemptCount(42, "planReview", projectRoot), 1);
+// });
 
-test("test_UPDATE_TASKS_JSON_throwsWithoutACheckpoint", () => {
-    const projectRoot = makeFixture();
-    assert.throws(() => main(JSON.stringify(packet(projectRoot, "fix the thing"))), /no checkpoint/);
-});
+// UPDATE_TASKS_JSON no longer reads the checkpoint, so a missing checkpoint no longer throws.
+// test("test_UPDATE_TASKS_JSON_throwsWithoutACheckpoint", () => {
+//     const projectRoot = makeFixture();
+//     assert.throws(() => main(JSON.stringify(packet(projectRoot, "fix the thing"))), /no checkpoint/);
+// });

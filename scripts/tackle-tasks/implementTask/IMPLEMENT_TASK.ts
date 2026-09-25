@@ -5,6 +5,7 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
+import { ensureDependenciesInstalled } from "../../shared/ensureDependenciesInstalled.ts";
 import { loadPreparedTask, type PreparedTask } from "../shared/preparedTask.ts";
 import { absolutePathsSection } from "../shared/promptSections.ts";
 import { resumedRunSection } from "../shared/resumedRunSection.ts";
@@ -463,16 +464,16 @@ export function implementPromptCombos(): { name: string; skeleton: string; rende
 
 // const agentLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.md$/, "-agents.log");
 
-// Same submodule listing as runStepHook.ts buildRewindPoints.
-function ensureDependenciesInstalled(worktree: string): void {
-  const submodulePaths = spawnSync("git", ["-C", worktree, "submodule", "foreach", "--recursive", "--quiet", "echo \"$displaypath\""], { encoding: "utf8" }).stdout.split("\n").filter(Boolean);
-  for (const relativePath of ["", ...submodulePaths]) {
-    const checkoutPath = relativePath === "" ? worktree : join(worktree, relativePath);
-    if (existsSync(join(checkoutPath, "package-lock.json")) && !existsSync(join(checkoutPath, "node_modules"))) {
-      execFileSync("npm", ["ci", "--no-audit", "--no-fund"], { cwd: checkoutPath, stdio: ["ignore", "pipe", "pipe"] });
-    }
-  }
-}
+// Retired: moved to scripts/shared/ensureDependenciesInstalled.ts, imported below.
+// function ensureDependenciesInstalled(worktree: string): void {
+//   const submodulePaths = spawnSync("git", ["-C", worktree, "submodule", "foreach", "--recursive", "--quiet", "echo \"$displaypath\""], { encoding: "utf8" }).stdout.split("\n").filter(Boolean);
+//   for (const relativePath of ["", ...submodulePaths]) {
+//     const checkoutPath = relativePath === "" ? worktree : join(worktree, relativePath);
+//     if (existsSync(join(checkoutPath, "package-lock.json")) && !existsSync(join(checkoutPath, "node_modules"))) {
+//       execFileSync("npm", ["ci", "--no-audit", "--no-fund"], { cwd: checkoutPath, stdio: ["ignore", "pipe", "pipe"] });
+//     }
+//   }
+// }
 
 export function main(input: string): Record<string, unknown> {
   const packet = JSON.parse(input) as ImplementTaskInput;

@@ -1,6 +1,7 @@
 // Behavioral checks for testPolicy.ts: per-occurrence test command discovery. Run: node --test tests/
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,9 +12,11 @@ import {
 } from "../scripts/shared/testPolicy.ts";
 import { createEmptyResolutionManifest } from "../scripts/shared/resolutionRequests.ts";
 
+// A real caller always passes a git checkout; findNearestPackageJson requires a .git ancestor to bound its walk.
 function withTempDir(body: (dirPath: string) => void): void {
     const dirPath = mkdtempSync(join(tmpdir(), "test-policy-"));
     try {
+        execFileSync("git", ["-C", dirPath, "init", "-q"]);
         body(dirPath);
     } finally {
         rmSync(dirPath, { recursive: true, force: true });

@@ -1,5 +1,5 @@
 // "commit if needed" x2 (pipeline.mmd). Walks occurrences deepest-first, commits dirty layers, derives its own message (rule 7).
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { requireAbsolutePath } from "./inputPaths.ts";
@@ -52,6 +52,16 @@ function stageOwnedChanges(occurrence: Occurrence, occurrences: Occurrence[], ow
   if (unstaged.length > 0)
     git(occurrence.checkoutPath, "add", "-A", "--", ...unstaged);
   return entries.map((entry) => entry.slice(3));
+}
+
+// An untracked-only gitlink can't be staged by `git add`, so `changed` may list a path never actually indexed.
+function hasStagedChangesFor(repoRoot: string, paths: string[]): boolean {
+  const result = spawnSync("git", ["-C", repoRoot, "diff", "--cached", "--quiet", "--", ...paths]);
+  if (result.status === 0)
+    return false;
+  if (result.status === 1)
+    return true;
+  throw new Error(`git diff --cached failed (${result.status}): ${result.stderr?.toString() ?? ""}`);
 }
 
 // F2: a commit's step is embedded in its message, so an unrecorded-but-landed commit is still recognizable on rerun.
@@ -112,7 +122,8 @@ export function commitTaskWork(input: CommitTaskWorkInput): CommitTaskWorkOutput
       continue;
 
     const changed = stageOwnedChanges(occurrence, occurrences, ownedOccurrencePaths);
-    if (changed.length > 0) {
+    const hasStagedChanges = changed.length > 0 && hasStagedChangesFor(occurrence.checkoutPath, changed);
+    if (hasStagedChanges) {
       // Pathspec commit: staged files outside the fence stay out of the task commit.
       git(occurrence.checkoutPath, "commit", "-q", "-m", commitMessageWithStepTrailer(message, stepId), "--", ...changed);
       const hash = git(occurrence.checkoutPath, "rev-parse", "HEAD").trim();

@@ -819,6 +819,30 @@ test("test_resetTask_fullReset_removesRunFoldersAgentFilesWorkflowFolderAndMerge
     }
 });
 
+test("test_resetTask_fullReset_skipsAStrayNonJsonFileInThePacketsFolder", async () => {
+    // Setup: task 7's packets folder has a real packet next to a stray .gitignore.
+    const repoRoot = makeTempRepoWithCommit();
+    const cwd = process.cwd();
+    try {
+        mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
+        writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber: 7, title: "t" }]));
+        writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), "[]");
+        const runFolder = join(repoRoot, ".taskTools", "runs", "0001");
+        mkdirSync(join(runFolder, "packets"), { recursive: true });
+        writeFileSync(join(runFolder, "packets", "01-PLAN_THE_TASK-0-1.json"), JSON.stringify({ taskNumber: 7, command: "" }));
+        writeFileSync(join(runFolder, "packets", ".gitignore"), "*.log\n");
+        git(repoRoot, "branch", "staging");
+
+        process.chdir(repoRoot);
+        await resetTask(7, "");
+
+        assert.equal(existsSync(runFolder), false);
+    } finally {
+        process.chdir(cwd);
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
+});
+
 test("test_resetTask_blocksWhenALaterTaskMergeSitsOnStagingAndNamesIt", async () => {
     // Setup: staging holds task 3's merge, then task 4's merge on top; both are in completedTasks.json.
     const repoRoot = makeTempRepoWithCommit();

@@ -20,6 +20,7 @@ import {
     readTaskRunState,
     reopenTaskRun,
     replaceEndedRunOutcome,
+    resetAttemptCount,
     resetAttemptCounts,
     transitionWorktreeLease,
     updateCurrentTaskRun,
@@ -324,7 +325,7 @@ test("test_updateCurrentTaskRun_holdsTheTaskStateLockWhileWriting", async () => 
     const { tasksPath } = resolveTaskFiles(root);
     const lockPath = join(root, "task-state.lock");
     const holdMs = 300;
-    // This process takes the lock first, so the hold is a fact rather than a race the child might lose.
+    // This process grabs the lock first, so the hold is guaranteed, not a race the child could lose.
     writeFileSync(lockPath, JSON.stringify({ pid: process.pid, createdAt: Date.now() }), { flag: "wx" });
     // The child only releases it, after the hold window.
     const childSource = `
@@ -561,7 +562,7 @@ test("test_adoptWorktreeLease_reconcilesToOneOwnerAfterAChildIsKilledRightAfterU
 // already ended and replaced. ---
 
 test("test_appendTaskCommits_throwsAndLeavesTheNewerRunUnchangedWhenTargetingAnEndedSiblingRun", () => {
-    // Scenario: a paused commit-recording call from an old run wakes up after the workflow ended that run and a later invocation claimed the task.
+    // Scenario: an old run's paused commit call wakes after the run ended and a new run claimed the task.
     const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
     claimTask(1, "run-old", root);
     endTaskRun(1, "run-old", root);
@@ -882,7 +883,7 @@ test("test_acquireAbsentWorktreeLease_reconcilesToOneOwnerAfterAChildIsKilledRig
 // that legitimately appeared during the recovery window between the kill and the retry. ---
 
 test("test_adoptWorktreeLease_refusesReconciliationWhenAThirdOwnerAppearsInTheRecoveryWindowAfterTheLeaseIsAlreadyWritten", async () => {
-    // Scenario: the process dies right after replacing the physical lease. A supervisor clears only the deliberately stale guards, exactly as the existing kill/retry tests do. Before the retry, another owner legitimately takes the physical lease.
+    // Scenario: process dies after replacing the lease; a new owner takes it before the supervisor's retry.
     const { root, worktreePath, leasePath } = makeAdoptionFixture();
     writeFileSync(leasePath, JSON.stringify({ runId: "run-old", pid: 1, createdAt: 1 }));
     await runAdoptionInChildAndKillAfter(root, "lease");
@@ -897,7 +898,7 @@ test("test_adoptWorktreeLease_refusesReconciliationWhenAThirdOwnerAppearsInTheRe
 });
 
 test("test_adoptWorktreeLease_refusesReconciliationWhenAThirdOwnerAppearsAfterAnIntentOnlySurvivor", async () => {
-    // Scenario: the process dies right after journaling the intent, before either authority changed. A different physical owner appears before the retry.
+    // Scenario: process dies after journaling intent, before either authority changed; a new owner appears before retry.
     const { root, worktreePath, leasePath } = makeAdoptionFixture();
     writeFileSync(leasePath, JSON.stringify({ runId: "run-old", pid: 1, createdAt: 1 }));
     await runAdoptionInChildAndKillAfter(root, "intent");
@@ -911,7 +912,7 @@ test("test_adoptWorktreeLease_refusesReconciliationWhenAThirdOwnerAppearsAfterAn
 });
 
 test("test_adoptWorktreeLease_rollbackPathRefusesToOverwriteAThirdOwnerWithThePriorLeaseBytes", () => {
-    // Scenario: a retained intent whose finish condition is false (its recorded new owner is not the currently active run, so reconciliation must roll back) finds a third owner holding the physical lease instead of either the recorded prior state or its own new owner. Rolling back must not stomp that third owner with previousLeaseBytes.
+    // Scenario: rollback must not overwrite a third owner's lease with the intent's previousLeaseBytes.
     const { root, worktreePath, leasePath } = makeAdoptionFixture();
     const priorOwnerBytes = JSON.stringify({ runId: "run-old", pid: 1, createdAt: 1 });
     const intent = {
@@ -923,7 +924,7 @@ test("test_adoptWorktreeLease_rollbackPathRefusesToOverwriteAThirdOwnerWithThePr
     const otherOwnerBytes = JSON.stringify({ runId: "run-other", pid: 999, createdAt: 987654 });
     writeFileSync(leasePath, otherOwnerBytes);
     const tasksBefore = readFileSync(join(root, "tasks.json"), "utf8");
-    // run-new is the active run in this fixture, not "run-stale", so reconciliation would take the rollback branch if it were allowed to proceed at all.
+    // run-new is active here, not run-stale, so reconciliation would take the rollback branch if allowed to proceed.
     assert.throws(() => adoptWorktreeLease(1, "run-new", root));
     assert.equal(readFileSync(leasePath, "utf8"), otherOwnerBytes);
     assert.equal(readFileSync(join(root, "tasks.json"), "utf8"), tasksBefore);
@@ -1035,6 +1036,22 @@ test("test_resetAttemptCounts_clearsEveryCounterAndCountedPass", () => {
     assert.equal(record.attempts, undefined);
     assert.equal(record.countedPasses, undefined);
     assert.deepEqual({ ...record, attempts: undefined, countedPasses: undefined }, { ...before, attempts: undefined, countedPasses: undefined });
+});
+
+test("test_resetAttemptCount_clearsOnlyTheNamedCounter", () => {
+    // Setup: a task with an active run holding two raised counters.
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-a", root);
+    raiseAttemptCount(1, "run-a", "planReview", "pass-1", root);
+    raiseAttemptCount(1, "run-a", "mergeAttempts", "pass-2", root);
+    // Test action: reset only the planReview counter.
+    const state = resetAttemptCount(1, "run-a", "planReview", root);
+    // Verification: planReview is gone, mergeAttempts is untouched.
+    const record = state.history[state.history.length - 1];
+    assert.equal(record.attempts?.planReview, undefined);
+    assert.equal(record.countedPasses?.planReview, undefined);
+    assert.equal(record.attempts?.mergeAttempts, 1);
+    assert.deepEqual(record.countedPasses?.mergeAttempts, ["pass-2"]);
 });
 
 test("test_resetAttemptCounts_refusesARunIdThatIsNotTheNewest", () => {

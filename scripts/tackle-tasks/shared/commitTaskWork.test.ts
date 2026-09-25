@@ -190,3 +190,16 @@ test("test_commitTaskWork_commitsARenamedOwnedFileNextToAStagedDeletion", () => 
     assert.match(names, /moved\/seed\.txt/);
     assert.match(names, /D\tgone\.txt/);
 });
+
+test("test_commitTaskWork_doesNotThrowOnAnOwnedGitlinkWithOnlyUntrackedContentInside", () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    const taskNumber = 9008;
+    seedTaskAndClaim(rootOrigin, taskNumber, "no-op task", "run-1", []);
+
+    writeFileSync(join(worktreePath, "child", "untracked.txt"), "untracked\n");
+
+    const result = commitTaskWork({ projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-1", stepId: "step-1", rootSourceBranch: "main" });
+
+    assert.equal(result.commits.some((commit) => commit.occurrenceId === ""), false);
+});

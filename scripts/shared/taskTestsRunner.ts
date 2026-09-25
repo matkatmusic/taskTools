@@ -1,7 +1,9 @@
 // The one place a suite runs and its failures are parsed.
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { findNearestPackageJson } from "./findPackageJson.ts";
+// import { ensurePackageJsonExists, getProjectRoot } from "./findPackageJson.ts";
 
 // Per process: a suite that runs this hook under test would otherwise truncate the outer run's log.
 export const LOG_PATH = `/tmp/tasktools-npm-test-${process.pid}.log`;
@@ -97,14 +99,20 @@ export async function runSuite(
   cwd: string, timeoutMs: number = SUITE_TIMEOUT_MS,
 ): Promise<{ allPassing: boolean; output: string; log: string; timedOut: boolean }> {
   // npm walks up to a parent package.json; from a fixture inside this repo that reruns this whole suite, forever.
-  if (!existsSync(join(cwd, "package.json")))
-    throw new Error(`task-tests: no package.json in ${cwd}`);
+  // if (!existsSync(join(cwd, "package.json")))
+  //   throw new Error(`task-tests: no package.json in ${cwd}`);
+  // if (ensurePackageJsonExists(getProjectRoot(cwd)) == false)
+  //   throw new Error(`task-tests: no package.json in ${cwd}`);
+  const packageJsonPath = findNearestPackageJson(cwd);
+  if (packageJsonPath === null)
+    throw new Error(`task-tests: no package.json at or above ${cwd}`);
+  const suiteFolder = dirname(packageJsonPath);
   // ponytail: strip NODE_TEST_CONTEXT and RUN_STEP_LOG so the child suite inherits neither the parent test context nor the live run log
   const { NODE_TEST_CONTEXT: _parentTestContext, RUN_STEP_LOG: _parentRunStepLog, ...env } = process.env;
   env.FORCE_COLOR = "0"; // Jest colors its output unless told otherwise; awk needs plain text.
-  env.SERVER_PORT = String(hashPort(cwd, 20000, 10000));
-  env.CDP_PORT = String(hashPort(cwd, 30000, 10000));
-  const run = await runCommandInProcessGroup(INITIAL_PASS, cwd, env, timeoutMs);
+  env.SERVER_PORT = String(hashPort(suiteFolder, 20000, 10000));
+  env.CDP_PORT = String(hashPort(suiteFolder, 30000, 10000));
+  const run = await runCommandInProcessGroup(INITIAL_PASS, suiteFolder, env, timeoutMs);
   const output = run.timedOut ? `the suite timed out after ${timeoutMs}ms and was killed` : `${run.output}`.trim();
   const log = output === "all passing" ? "" : existsSync(LOG_PATH) ? readFileSync(LOG_PATH, "utf8") : "";
   return { allPassing: output === "all passing", output, log, timedOut: run.timedOut };
@@ -164,7 +172,20 @@ export function writeKnownFailingTests(projectRoot: string, failing: FailingTest
 
 // A failure is new when no known entry has the same file and name.
 export function newFailingTests(failing: FailingTest[], known: FailingTest[]): FailingTest[] {
-  return failing.filter((test) => !known.some((k) => k.file === test.file && k.name === test.name));
+  const result: FailingTest[] = [];
+  for (const test of failing) {
+    let isKnown = false;
+    for (const k of known) {
+      const sameTest = k.file === test.file && k.name === test.name;
+      if (sameTest) {
+        isKnown = true;
+        break;
+      }
+    }
+    if (!isKnown)
+      result.push(test);
+  }
+  return result;
 }
 
 // No "all passing" and no parsed failure means the suite crashed; that is red, never a vacuous pass.

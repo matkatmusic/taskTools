@@ -51,13 +51,14 @@ test("test_WHAT_DID_THE_PLANNER_RETURN_routesPlanOutcomeToImplementTaskWhenDiffi
     assert.equal(output.next, "pipeline-implementTask.mmd::IMPLEMENT_TASK");
 });
 
-test("test_WHAT_DID_THE_PLANNER_RETURN_amendsWhenThePlanNamesNoDeclaredTestFile", () => {
-    const { root, planFile } = makeProjectRootWithDeclaredTests(5, "no test files mentioned here");
-    const output = main(JSON.stringify({ ...base(root), additionalData: { outcome: "PLAN", planFile, clarifyRequest: "" } }));
-    assert.equal(output.next, "pipeline-whatIsReviewVerdict.mmd::UPDATE_TASKS_JSON");
-    assert.equal(output.verdict, "AMEND");
-    assert.equal(output.notes, "the task declares tests but the plan does not name: tests/test-thing.ts or tests/thing.test.ts or src/thing.test.ts");
-});
+// User ruling 2026-09-24: the guessed test-name check is retired.
+// test("test_WHAT_DID_THE_PLANNER_RETURN_amendsWhenThePlanNamesNoDeclaredTestFile", () => {
+//     const { root, planFile } = makeProjectRootWithDeclaredTests(5, "no test files mentioned here");
+//     const output = main(JSON.stringify({ ...base(root), additionalData: { outcome: "PLAN", planFile, clarifyRequest: "" } }));
+//     assert.equal(output.next, "pipeline-whatIsReviewVerdict.mmd::UPDATE_TASKS_JSON");
+//     assert.equal(output.verdict, "AMEND");
+//     assert.equal(output.notes, "the task declares tests but the plan does not name: tests/test-thing.ts or tests/thing.test.ts or src/thing.test.ts");
+// });
 
 test("test_WHAT_DID_THE_PLANNER_RETURN_routesClarifyOutcomeToTheRoundsCheck", () => {
     const output = main(JSON.stringify({ ...base(makeProjectRootWithDifficulty(5)), additionalData: { outcome: "CLARIFY", planFile: "", clarifyRequest: "which database?" } }));

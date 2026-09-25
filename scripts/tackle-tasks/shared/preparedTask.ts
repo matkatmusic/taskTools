@@ -98,7 +98,10 @@ export function loadPreparedTask(taskNumber: number, worktree: string, projectRo
     const onStaging = spawnSync("git", ["-C", top, "cat-file", "-e", `staging:${prefix}${basename(path)}`]).status === 0;
     if (onStaging)
       continue;
-    throw new Error(`task ${taskNumber}: modifiableFiles names ${root}/${file} but the file does not exist; list it in "createsFiles" if this task creates it, or run the task that creates it first`);
+    // User ruling: no pipeline failures for nitpicks like a file missing from the plan. A modifiableFiles
+    // entry missing on disk and not on staging is treated as a file the task creates, not an error.
+    // throw new Error(`task ${taskNumber}: modifiableFiles names ${root}/${file} but the file does not exist; list it in "createsFiles" if this task creates it, or run the task that creates it first`);
+    continue;
   }
   const group = groupTasksByFileOverlap(allTasks).find((g) => g.taskNumbers.includes(taskNumber));
   const siblingTasks = (group ? group.taskNumbers.filter((n) => n !== taskNumber) : [])
