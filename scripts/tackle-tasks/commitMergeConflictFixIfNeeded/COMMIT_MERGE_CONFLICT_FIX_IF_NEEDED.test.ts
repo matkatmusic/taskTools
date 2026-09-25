@@ -14,6 +14,8 @@ import { acquireSourceRepoLock, buildLockOwner } from "../shared/sourceRepoLock.
 import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
 import { resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../../shared/catchUpStaging.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 
@@ -41,6 +43,7 @@ function makeTempRepoWithCommit(branchName: string): string {
 let nextGroupId = 1;
 function createLinkedWorktree(rootOrigin: string): { worktreePath: string; taskNumber: number } {
     const groupId = nextGroupId++;
+    catchUpStaging(rootOrigin, groupId);
     const worktreePath = createWorktreeForGroup(rootOrigin, { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" });
     return { worktreePath, taskNumber: groupId };
 }

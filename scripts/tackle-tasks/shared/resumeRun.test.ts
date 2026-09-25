@@ -23,6 +23,8 @@ import { resetIntentPath } from "./resetIntent.ts";
 import { taskBranchName, taskWorktreeCreateJournalPath } from "./createTaskWorktree.ts";
 import { main as resetWorktreeMain } from "../preambleStatusCheck/RESET_WORKTREE.ts";
 import { main as takeLeaseBeforeReset } from "../preambleStatusCheck/TAKE_WORKTREE_LEASE_BEFORE_RESET.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../../shared/catchUpStaging.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 
@@ -58,6 +60,7 @@ let nextGroupId = 1;
 // runId is passed through so the worktree's lease names the same run as the seeded task, unlike commitTaskWork.test.ts's version.
 function createLinkedWorktree(rootOrigin: string, runId: string): string {
     const groupId = nextGroupId++;
+    catchUpStaging(rootOrigin, groupId);
     return createWorktreeForGroup(rootOrigin, { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" }, runId);
 }
 

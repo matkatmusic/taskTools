@@ -9,6 +9,8 @@ import { join } from "node:path";
 import { recordTaskModifiedFiles } from "./recordTaskModifiedFiles.ts";
 import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
 import { resolveTaskFiles } from "../../shared/taskFiles.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../../shared/catchUpStaging.ts";
 
 // git submodule add/clone needs this in a sandboxed test environment.
 process.env.GIT_ALLOW_PROTOCOL = "file";
@@ -41,6 +43,7 @@ let nextGroupId = 1;
 
 function createLinkedWorktree(rootOrigin: string): string {
     const groupId = nextGroupId++;
+    catchUpStaging(rootOrigin, groupId);
     return createWorktreeForGroup(rootOrigin, { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" });
 }
 

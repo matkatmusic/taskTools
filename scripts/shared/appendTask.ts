@@ -3,130 +3,146 @@ import { readFileSync } from "node:fs";
 import { relative } from "node:path";
 import { readTaskFile, resolveTaskFiles, seedTaskFilesIfAbsent, type TaskRecord } from "./taskFiles.ts";
 import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
+import type { AgentOptions } from "../tackle-tasks/generateSteps.ts";
 
 
 export type NewTaskPayload = {
-    title: string;
-    userDescription: string;
-    goal: string[];
-    notInScope: string[];
-    schemaVersion: string;
-    hasTests: boolean;
-    tests: string;
-    problemSolvedByTask?: string;
-    chainGoal?: string[];
-    files?: string[];
-    createsFiles?: string[];
-    description?: string;
-    difficulty?: number;
-    blockedBy?: { taskNumber: number; reason: string }[];
-    handoffFilePaths?: string[];
+  title: string;
+  userDescription: string;
+  goal: string[];
+  notInScope: string[];
+  schemaVersion: string;
+  hasTests: boolean;
+  tests: string;
+  problemSolvedByTask?: string;
+  chainGoal?: string[];
+  files?: string[];
+  createsFiles?: string[];
+  description?: string;
+  difficulty?: number;
+  blockedBy?: { taskNumber: number; reason: string }[];
+  handoffFilePaths?: string[];
+  agent?: Record<string, AgentOptions>;
 };
 
 export function getHeadCommitHash(projectRoot: string): string {
-    try {
-        return execFileSync("git", ["rev-parse", "HEAD"], { cwd: projectRoot, encoding: "utf8" }).trimEnd();
-    } catch {
-        return "";
-    }
+  try {
+    return execFileSync("git", ["rev-parse", "HEAD"], { cwd: projectRoot, encoding: "utf8" }).trimEnd();
+  }
+  catch {
+    return "";
+  }
 }
 
 export function buildTaskEntry(payload: NewTaskPayload, taskNumber: number, commitHash: string): TaskRecord {
-    const entry: TaskRecord = { taskNumber };
-    const commitHashIsUsable = /^[0-9a-f]{40}$/.test(commitHash);
-    if (commitHashIsUsable) {
-        entry.version = commitHash;
+  const entry: TaskRecord = { taskNumber };
+  const commitHashIsUsable = /^[0-9a-f]{40}$/.test(commitHash);
+  if (commitHashIsUsable) {
+    entry.version = commitHash;
+  }
+  entry.title = payload.title;
+  entry.userDescription = payload.userDescription;
+  for (const chainGoal of payload.chainGoal ? [payload.chainGoal] : []) {
+    const chainGoalIsNonEmpty = chainGoal.length > 0;
+    if (chainGoalIsNonEmpty) {
+      entry.chainGoal = chainGoal;
     }
-    entry.title = payload.title;
-    entry.userDescription = payload.userDescription;
-    if (payload.chainGoal && payload.chainGoal.length > 0) {
-        entry.chainGoal = payload.chainGoal;
+  }
+  entry.goal = payload.goal;
+  if (!Array.isArray(payload.notInScope)) {
+    throw new Error(`task ${taskNumber}: notInScope is required (an array of "- " lines)`);
+  }
+  entry.notInScope = payload.notInScope;
+  if (payload.problemSolvedByTask) {
+    entry.problemSolvedByTask = payload.problemSolvedByTask;
+  }
+  if (payload.description) {
+    entry.description = payload.description;
+  }
+  // if (payload.files && payload.files.length > 0) {
+  //     entry.files = payload.files;
+  // }
+  entry.modifiableFiles = payload.files ?? [];
+  entry.readOnlyFiles = ["*"];
+  for (const createsFiles of payload.createsFiles ? [payload.createsFiles] : []) {
+    const createsFilesIsNonEmpty = createsFiles.length > 0;
+    if (createsFilesIsNonEmpty) {
+      entry.createsFiles = createsFiles;
     }
-    entry.goal = payload.goal;
-    if (!Array.isArray(payload.notInScope)) {
-        throw new Error(`task ${taskNumber}: notInScope is required (an array of "- " lines)`);
+  }
+  entry.schemaVersion = payload.schemaVersion;
+  entry.hasTests = payload.hasTests;
+  entry.tests = payload.tests;
+  if (payload.difficulty !== undefined) {
+    entry.difficulty = payload.difficulty;
+  }
+  for (const blockedBy of payload.blockedBy ? [payload.blockedBy] : []) {
+    const blockedByIsNonEmpty = blockedBy.length > 0;
+    if (blockedByIsNonEmpty) {
+      entry.blockedBy = blockedBy;
     }
-    entry.notInScope = payload.notInScope;
-    if (payload.problemSolvedByTask) {
-        entry.problemSolvedByTask = payload.problemSolvedByTask;
-    }
-    if (payload.description) {
-        entry.description = payload.description;
-    }
-    // if (payload.files && payload.files.length > 0) {
-    //     entry.files = payload.files;
-    // }
-    entry.modifiableFiles = payload.files ?? [];
-    entry.readOnlyFiles = ["*"];
-    if (payload.createsFiles && payload.createsFiles.length > 0) {
-        entry.createsFiles = payload.createsFiles;
-    }
-    entry.schemaVersion = payload.schemaVersion;
-    entry.hasTests = payload.hasTests;
-    entry.tests = payload.tests;
-    if (payload.difficulty !== undefined) {
-        entry.difficulty = payload.difficulty;
-    }
-    if (payload.blockedBy && payload.blockedBy.length > 0) {
-        entry.blockedBy = payload.blockedBy;
-    }
-    if (payload.handoffFilePaths && payload.handoffFilePaths.length > 0) {
-        entry.handoffFilePaths = payload.handoffFilePaths;
-    }
-    return entry;
+  }
+  if (payload.handoffFilePaths && payload.handoffFilePaths.length > 0) {
+    entry.handoffFilePaths = payload.handoffFilePaths;
+  }
+  if (payload.agent) {
+    entry.agent = payload.agent;
+  }
+  return entry;
 }
 
 // Pre-plugin repos keep tasks.json at the project root, so the path is resolved rather than hardcoded.
 export function commitTasksJson(projectRoot: string, taskNumber: number): void {
-    const tasksPath = relative(projectRoot, resolveTaskFiles(projectRoot).tasksPath);
-    execFileSync("git", ["add", tasksPath], { cwd: projectRoot });
-    // --only, so a session that already staged unrelated work does not get it swept into this commit.
-    execFileSync("git", ["commit", "--only", tasksPath, "-m", `created task ${taskNumber}`], { cwd: projectRoot });
+  const tasksPath = relative(projectRoot, resolveTaskFiles(projectRoot).tasksPath);
+  execFileSync("git", ["add", tasksPath], { cwd: projectRoot });
+  // --only, so a session that already staged unrelated work does not get it swept into this commit.
+  execFileSync("git", ["commit", "--only", tasksPath, "-m", `created task ${taskNumber}`], { cwd: projectRoot });
 }
 
 // Appends under the shared task-state lock so a concurrent closeTasks cannot overwrite or be overwritten (C86-23).
 export function appendTaskToTasksJson(
-    payload: NewTaskPayload,
-    projectRoot: string,
-    { onAcquired }: { onAcquired?: () => void } = {},
+  payload: NewTaskPayload,
+  projectRoot: string,
+  { onAcquired }: { onAcquired?: () => void } = {},
 ): TaskRecord {
-    const pair = resolveTaskFiles(projectRoot);
-    seedTaskFilesIfAbsent(pair);
-    const entry = withTaskStateLock(pair.tasksPath, () => {
-        const tasks = readTaskFile(pair.tasksPath);
-        const usedNumbers = [...tasks, ...readTaskFile(pair.completedTasksPath)].map((task) => task.taskNumber);
-        const taskNumber = Math.max(0, ...usedNumbers) + 1;
-        const commitHash = getHeadCommitHash(projectRoot);
-        const entry = buildTaskEntry(payload, taskNumber, commitHash);
-        writeJsonAtomically(pair.tasksPath, [...tasks, entry]);
-        return entry;
-    }, { onAcquired });
-    commitTasksJson(projectRoot, entry.taskNumber);
+  const pair = resolveTaskFiles(projectRoot);
+  seedTaskFilesIfAbsent(pair);
+  const entry = withTaskStateLock(pair.tasksPath, () => {
+    const tasks = readTaskFile(pair.tasksPath);
+    const usedNumbers = [...tasks, ...readTaskFile(pair.completedTasksPath)].map((task) => task.taskNumber);
+    const taskNumber = Math.max(0, ...usedNumbers) + 1;
+    const commitHash = getHeadCommitHash(projectRoot);
+    const entry = buildTaskEntry(payload, taskNumber, commitHash);
+    writeJsonAtomically(pair.tasksPath, [...tasks, entry]);
     return entry;
+  }, { onAcquired });
+  commitTasksJson(projectRoot, entry.taskNumber);
+  return entry;
 }
 
 function readStdin(): string {
-    try {
-        return readFileSync(0, "utf8");
-    } catch {
-        return "";
-    }
+  try {
+    return readFileSync(0, "utf8");
+  }
+  catch {
+    return "";
+  }
 }
 
 function fail(problem: string): never {
-    process.stderr.write(
-        `appendTask: ${problem}\n` +
+  process.stderr.write(
+    `appendTask: ${problem}\n` +
             `usage: node appendTask.ts <<'CREATETASKEOF'\n<task payload JSON>\nCREATETASKEOF\n`,
-    );
-    process.exit(1);
+  );
+  process.exit(1);
 }
 
 if (process.argv[1]?.endsWith("appendTask.ts")) {
-    const payloadText = readStdin().replace(/\n$/, "");
-    if (payloadText === "") {
-        fail("no payload on stdin");
-    }
-    const payload = JSON.parse(payloadText) as NewTaskPayload;
-    const entry = appendTaskToTasksJson(payload, process.cwd());
-    process.stdout.write(`${entry.taskNumber}\n`);
+  const payloadText = readStdin().replace(/\n$/, "");
+  if (payloadText === "") {
+    fail("no payload on stdin");
+  }
+  const payload = JSON.parse(payloadText) as NewTaskPayload;
+  const entry = appendTaskToTasksJson(payload, process.cwd());
+  process.stdout.write(`${entry.taskNumber}\n`);
 }

@@ -15,6 +15,8 @@ import {
 } from "./occurrences.ts";
 import type { Occurrence } from "./occurrences.ts";
 import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../../shared/catchUpStaging.ts";
 
 // git submodule add/clone needs this in a sandboxed test environment.
 process.env.GIT_ALLOW_PROTOCOL = "file";
@@ -48,6 +50,7 @@ let nextGroupId = 1;
 // The production preparer: creates task-N in both the root repo and every submodule.
 function createLinkedWorktree(rootOrigin: string): string {
     const groupId = nextGroupId++;
+    catchUpStaging(rootOrigin, groupId);
     return createWorktreeForGroup(rootOrigin, { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" });
 }
 

@@ -16,6 +16,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createWorktreeForGroup } from "../../scripts/shared/prepareTasks.ts";
+import { catchUpStaging } from "../../scripts/shared/catchUpStaging.ts";
 import type { TaskGroup } from "../../scripts/shared/taskGroups.ts";
 
 // git >=2.38 blocks file-transport submodule/fetch operations; repo config is ignored in a
@@ -70,5 +71,7 @@ let nextGroupId = 100_000;
 // (createWorktreeForGroup): every submodule, at every depth, checked out onto task-N.
 export function makeLinkedWorktree(rootOrigin: string, groupId: number = nextGroupId++): string {
     const group: TaskGroup = { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" };
+    // Worktree creation only reads staging; the locked catch-up settles it first.
+    catchUpStaging(rootOrigin, groupId);
     return createWorktreeForGroup(rootOrigin, group);
 }

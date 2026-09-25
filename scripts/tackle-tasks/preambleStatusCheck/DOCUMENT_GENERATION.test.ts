@@ -8,6 +8,8 @@ import { join } from "node:path";
 import { main } from "./DOCUMENT_GENERATION.ts";
 import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
 import type { TaskGroup } from "../../shared/taskGroups.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../../shared/catchUpStaging.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
@@ -32,6 +34,7 @@ test("test_DOCUMENT_GENERATION_writesTheBriefInAutogenMode", () => {
     const repoRoot = makeTempRepo();
     seedTasksFile(repoRoot, [{ taskNumber: 9, title: "t9", description: "do it", modifiableFiles: ["fileA.txt"] }]);
     const group: TaskGroup = { groupId: 9, taskNumbers: [9], filePaths: [], scope: "declared" };
+    catchUpStaging(repoRoot, 1);
     const worktreePath = createWorktreeForGroup(repoRoot, group);
     const packet = {
         box: "Q_INIT_SUBMODULES_RECURSIVELY", scriptSignal: "continue", taskNumber: 9, runId: "run-a",
@@ -49,6 +52,7 @@ test("test_DOCUMENT_GENERATION_writesTheBriefInUpdateMode", () => {
     const repoRoot = makeTempRepo();
     seedTasksFile(repoRoot, [{ taskNumber: 9, title: "t9", description: "do it", modifiableFiles: ["fileA.txt"] }]);
     const group: TaskGroup = { groupId: 9, taskNumbers: [9], filePaths: [], scope: "declared" };
+    catchUpStaging(repoRoot, 1);
     const worktreePath = createWorktreeForGroup(repoRoot, group);
     const packet = {
         box: "Q_DOES_FENCE_COVER_WORKTREE_Q", scriptSignal: "continue", taskNumber: 9, runId: "run-a",
@@ -67,6 +71,7 @@ test("test_DOCUMENT_GENERATION_runsTwiceWithTheSameInput", () => {
     const repoRoot = makeTempRepo();
     seedTasksFile(repoRoot, [{ taskNumber: 9, title: "t9", description: "do it", modifiableFiles: ["fileA.txt"] }]);
     const group: TaskGroup = { groupId: 9, taskNumbers: [9], filePaths: [], scope: "declared" };
+    catchUpStaging(repoRoot, 1);
     const worktreePath = createWorktreeForGroup(repoRoot, group);
     const input = JSON.stringify({
         box: "Q_INIT_SUBMODULES_RECURSIVELY", scriptSignal: "continue", taskNumber: 9, runId: "run-a",

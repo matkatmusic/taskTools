@@ -348,3 +348,18 @@ test("test_skillBody_firstInvocationWritesAgentFilesAndAsksForASecondInvocation"
     assert.match(second, /^WORKFLOW 1: /m);
     assert.doesNotMatch(second, /waitForAgentRegistry|end your turn/);
 });
+
+// Agent files land next to tasks.json's project root, not the session cwd.
+test("test_skillBody_findsAgentFilesWhenProjectRootIsASubfolderOfTheProjectThatOwnsTasksJson", () => {
+    const root = makeTargetRepository([74]);
+    const subfolder = join(root, "submodule");
+    mkdirSync(subfolder, { recursive: true });
+
+    skillBody("[74]", root);
+    assert.ok(existsSync(join(root, ".claude", "agents", "task-74-implement-task.md")));
+
+    const brief = skillBody("[74]", subfolder);
+
+    assert.match(brief, /^WORKFLOW 1: /m);
+    assert.doesNotMatch(brief, /were just written/);
+});

@@ -562,7 +562,10 @@ export function createWorktreeForGroup(repoRoot: string, group: TaskGroup, runId
         lease = acquireTaskWorktreeLease(worktreePath, runId);
         killSelfForTest("lease");
         try {
-            const stagingTip = resolveOrCreateStagingTip(repoRoot);
+            // Only the locked catch-up moves staging; this path only reads it.
+            // const stagingTip = resolveOrCreateStagingTip(repoRoot);
+            const stagingTip = readStagingTip(repoRoot);
+            if (stagingTip === null) throw new Error(`${STAGING_REF} is missing in "${repoRoot}"; the staging catch-up must create it`);
             if (worktreeHoldsRetainedWork(worktreePath, repoRoot, branchName, stagingTip) === WORKTREE_HOLDS_RETAINED_WORK) {
                 throw new Error(
                     `worktree at "${worktreePath}" holds retained work from a previous run; `
@@ -591,7 +594,19 @@ export function createWorktreeForGroup(repoRoot: string, group: TaskGroup, runId
         lease = acquireTaskWorktreeLease(worktreePath, runId);
         killSelfForTest("lease");
         try {
-            stagingTips = resolveOrCreateStagingTipEverywhere(repoRoot);
+            // Only the locked catch-up moves staging; this path only reads it.
+            // stagingTips = resolveOrCreateStagingTipEverywhere(repoRoot);
+            const stagingSubmodulePaths = execFileSync("git", ["-C", repoRoot, "submodule", "foreach", "--recursive", "--quiet", "echo \"$displaypath\""], { encoding: "utf8" })
+                .split("\n")
+                .filter((line) => line.length > 0)
+                .sort((a, b) => b.split("/").length - a.split("/").length);
+            stagingTips = new Map<string, string>();
+            for (const occurrenceId of [...stagingSubmodulePaths, ""]) {
+                const repository = join(repoRoot, occurrenceId);
+                const tip = readStagingTip(repository);
+                if (tip === null) throw new Error(`${STAGING_REF} is missing in "${repository}"; the staging catch-up must create it`);
+                stagingTips.set(occurrenceId, tip);
+            }
             const stagingTip = stagingTips.get("")!;
             if (branchRefHoldsRetainedWork(repoRoot, branchName, stagingTip) === WORKTREE_HOLDS_RETAINED_WORK) {
                 throw new Error(
@@ -691,7 +706,14 @@ export function buildWorkflowArguments(
     // if (stagingVerify.status !== 0) {
     //     execFileSync("git", ["-C", repoRoot, "branch", "staging"], { stdio: "ignore" });
     // }
-    resolveOrCreateStagingTipEverywhere(repoRoot);
+    // Only the locked catch-up moves staging; this path only reads it.
+    // resolveOrCreateStagingTipEverywhere(repoRoot);
+    const stagingSubmodulePaths = execFileSync("git", ["-C", repoRoot, "submodule", "foreach", "--recursive", "--quiet", "echo \"$displaypath\""], { encoding: "utf8" })
+        .split("\n")
+        .filter((line) => line.length > 0);
+    for (const repository of [...stagingSubmodulePaths.map((path) => join(repoRoot, path)), repoRoot]) {
+        if (readStagingTip(repository) === null) throw new Error(`${STAGING_REF} is missing in "${repository}"; the staging catch-up must create it`);
+    }
     const repositorySources = collectRepositorySources(repoRoot, "staging");
     const preparedGroups: PreparedGroup[] = [];
     try {
@@ -788,7 +810,14 @@ function runAsCli(): void {
         // if (stagingVerify.status !== 0) {
         //     execFileSync("git", ["-C", repoRoot, "branch", "staging"], { stdio: "ignore" });
         // }
-        resolveOrCreateStagingTipEverywhere(repoRoot);
+        // Only the locked catch-up moves staging; this path only reads it.
+        // resolveOrCreateStagingTipEverywhere(repoRoot);
+        const stagingSubmodulePaths = execFileSync("git", ["-C", repoRoot, "submodule", "foreach", "--recursive", "--quiet", "echo \"$displaypath\""], { encoding: "utf8" })
+            .split("\n")
+            .filter((line) => line.length > 0);
+        for (const repository of [...stagingSubmodulePaths.map((path) => join(repoRoot, path)), repoRoot]) {
+            if (readStagingTip(repository) === null) throw new Error(`${STAGING_REF} is missing in "${repository}"; the staging catch-up must create it`);
+        }
         const manifest = loadRepositoryManifest(repoRoot, "staging");
         workflowArguments = buildWorkflowArguments(repoRoot, DEFAULT_TYPECHECK_COMMAND, tasks, runId);
         // startTimestamp is stamped here because workflow scripts cannot call Date.now().

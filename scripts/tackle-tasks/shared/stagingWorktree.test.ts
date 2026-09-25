@@ -50,6 +50,17 @@ test("test_ensureStagingWorktree_addsALinkedWorktreeOnTheSourceBranch", () => {
     assert.equal(git(repo, "worktree", "list", "--porcelain").includes(realpathSync(path)), true);
 });
 
+test("test_ensureStagingWorktree_doesNotMoveStagingThatIsBehindHead", () => {
+    const repo = makeTempRepoWithTestScript("main");
+    git(repo, "branch", "staging");
+    const stagingBefore = git(repo, "rev-parse", "staging");
+    git(repo, "commit", "-q", "--allow-empty", "-m", "ahead of staging");
+
+    ensureStagingWorktree(repo, "staging");
+
+    assert.equal(git(repo, "rev-parse", "staging"), stagingBefore);
+});
+
 test("test_stagingWorktreePath_usesAwaitingTestingAsTheFolderName", () => {
     const repo = makeTempRepoWithTestScript("main");
 

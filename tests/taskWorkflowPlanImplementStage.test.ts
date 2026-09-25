@@ -6,6 +6,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, 
 import { tmpdir } from 'node:os'
 import { compileFunction } from 'node:vm'
 import { buildWorkflowArguments } from '../scripts/shared/prepareTasks.ts'
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from '../scripts/shared/catchUpStaging.ts'
 import type { TaskRecord } from '../scripts/shared/taskFiles.ts'
 
 const REPO_ROOT = process.cwd()
@@ -149,6 +151,7 @@ test('plan alone tolerates a missing repositoryManifest', async () => {
 
 test('plan+implement commits only in each prepared task worktree', async () => {
   const { root, tasks } = makeTwoTaskSourceRepo()
+  catchUpStaging(root, 1)
   const prepared = buildWorkflowArguments(root, 'true', tasks)
   const cwd = process.cwd()
   try {
@@ -190,6 +193,7 @@ test('plan+implement commits only in each prepared task worktree', async () => {
 test('plan+implement reports blocked when the implementer claims done without committing', async () => {
   const { root, tasks } = makeTwoTaskSourceRepo()
   const task = tasks[0]!
+  catchUpStaging(root, 1)
   const prepared = buildWorkflowArguments(root, 'true', [task])
   try {
     const group = prepared.groups[0]!
@@ -235,6 +239,7 @@ test('plan+implement reports blocked when the implementer claims done without co
 test('plan+implement rejects a planner that returns an existing plan outside the task worktree', async () => {
   const { root, tasks } = makeTwoTaskSourceRepo()
   const task = tasks[0]!
+  catchUpStaging(root, 1)
   const prepared = buildWorkflowArguments(root, 'true', [task])
   const group = prepared.groups[0]!
   linkScripts(group.worktree)
@@ -278,6 +283,7 @@ test('plan+implement rejects a planner that returns an existing plan outside the
 test('plan+implement rejects a planner that reports planned at the expected path without writing it', async () => {
   const { root, tasks } = makeTwoTaskSourceRepo()
   const task = tasks[0]!
+  catchUpStaging(root, 1)
   const prepared = buildWorkflowArguments(root, 'true', [task])
   const group = prepared.groups[0]!
   linkScripts(group.worktree)
@@ -319,6 +325,7 @@ test('plan+implement rejects a planner that reports planned at the expected path
 test('plan, verify, widen-files, and apply-feedback calls all use the task-numbered Plan phase', async () => {
   const { root, tasks } = makeTwoTaskSourceRepo()
   const task = tasks[0]!
+  catchUpStaging(root, 1)
   const prepared = buildWorkflowArguments(root, 'true', [task])
   const group = prepared.groups[0]!
   linkScripts(group.worktree)
@@ -375,6 +382,7 @@ test('plan, verify, widen-files, and apply-feedback calls all use the task-numbe
 test('plan+implement blocks a notes-only commit that never touches an owned file', async () => {
   const { root, tasks } = makeTwoTaskSourceRepo()
   const task = tasks[0]!
+  catchUpStaging(root, 1)
   const prepared = buildWorkflowArguments(root, 'true', [task])
   const group = prepared.groups[0]!
   linkScripts(group.worktree)
@@ -420,6 +428,7 @@ test('plan+implement blocks a notes-only commit that never touches an owned file
 test('plan+implement blocks a done result that deletes the previously committed notes file', async () => {
   const { root, tasks } = makeTwoTaskSourceRepo()
   const task = tasks[0]!
+  catchUpStaging(root, 1)
   const prepared = buildWorkflowArguments(root, 'true', [task])
   const group = prepared.groups[0]!
   linkScripts(group.worktree)
@@ -471,6 +480,7 @@ test('plan+implement blocks a done result that deletes the previously committed 
 test('plan+implement blocks an owned commit that omits the required notes file', async () => {
   const { root, tasks } = makeTwoTaskSourceRepo()
   const task = tasks[0]!
+  catchUpStaging(root, 1)
   const prepared = buildWorkflowArguments(root, 'true', [task])
   const group = prepared.groups[0]!
   linkScripts(group.worktree)
@@ -520,6 +530,7 @@ test('plan+implement blocks an owned commit that omits the required notes file',
 test('widened ownership survives replanning, verification, and a separately launched implement stage', async () => {
   const { root, tasks } = makeTwoTaskSourceRepo()
   const task = tasks[0]! // owns only a.ts; b.ts exists on disk but is unowned
+  catchUpStaging(root, 1)
   const prepared = buildWorkflowArguments(root, 'true', [task])
   const group = prepared.groups[0]!
   linkScripts(group.worktree)
@@ -587,6 +598,7 @@ test('widened ownership survives replanning, verification, and a separately laun
 test('plan+implement rejects missing sourceRoot before source or worktree mutation', async () => {
   const { root, tasks } = makeTwoTaskSourceRepo()
   const task = tasks[0]!
+  catchUpStaging(root, 1)
   const prepared = buildWorkflowArguments(root, 'true', [task])
   const group = prepared.groups[0]!
   linkScripts(group.worktree)
@@ -630,6 +642,7 @@ test('a third rejected review with missingFiles widens every downstream implemen
   const origin = mkdtempSync(join(tmpdir(), 'task-workflow-plan-implement-origin-'))
   git(origin, 'init', '-q', '--bare')
   git(root, 'remote', 'add', 'origin', origin)
+  catchUpStaging(root, 1)
 
   const prepared = JSON.parse(
     execFileSync('node', [join(REPO_ROOT, 'scripts', 'shared', 'prepareTasks.ts'), String(task.taskNumber)], { cwd: root, encoding: 'utf8' }),

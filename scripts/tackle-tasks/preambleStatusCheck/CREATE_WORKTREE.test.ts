@@ -10,6 +10,8 @@ import { claimTask } from "../shared/taskRunState.ts";
 import { taskBranchName, taskWorktreeCreateJournalPath } from "../shared/createTaskWorktree.ts";
 import { resolveTaskWorktreeConventionDirectory, taskWorktreeLeasePath } from "../../shared/prepareTasks.ts";
 import { git, addSubmodule, makeCommittedRepo } from "../../../tests/support/gitFixtures.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../../shared/catchUpStaging.ts";
 
 function seedTasksFile(root: string, tasks: unknown[]): void {
     writeFileSync(join(root, "tasks.json"), `${JSON.stringify(tasks, null, 2)}\n`);
@@ -21,6 +23,7 @@ test("test_CREATE_WORKTREE_createsARealWorktreeOnTheTasksBranchWithSubmodulesPop
     addSubmodule(root, submoduleOrigin, "vendor");
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
+    catchUpStaging(root, 1);
 
     const output = main(JSON.stringify({
         box: "Q_DOES_WORKTREE_EXIST_Q", scriptSignal: "continue", taskNumber: 1, runId: "run-a", projectRoot: root,
@@ -40,6 +43,7 @@ test("test_CREATE_WORKTREE_recoversAfterBeingKilledRightAfterGitWorktreeAdd", as
     addSubmodule(root, submoduleOrigin, "vendor");
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
+    catchUpStaging(root, 1);
     const packet = JSON.stringify({
         box: "Q_DOES_WORKTREE_EXIST_Q", scriptSignal: "continue", taskNumber: 1, runId: "run-a", projectRoot: root,
         worktree: "", branch: taskBranchName(1), docsMode: "", planFile: "", exitType: "", exitNote: "",

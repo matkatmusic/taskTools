@@ -13,6 +13,8 @@ import {
 import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
 import type { TaskGroup } from "../../shared/taskGroups.ts";
 import type { TaskRunRecord } from "./taskRunState.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../../shared/catchUpStaging.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
@@ -249,6 +251,7 @@ test("test_configureGeneratedArtifactIsolation_marksAnAlreadyTrackedBriefSkipWor
     git(repoRoot, "add", "plans/brief-9.md");
     git(repoRoot, "commit", "-q", "-m", "add brief-9");
     const group: TaskGroup = { groupId: 9, taskNumbers: [9], filePaths: [], scope: "declared" };
+    catchUpStaging(repoRoot, 1);
     const worktreePath = createWorktreeForGroup(repoRoot, group);
     // Mark generated artifacts skip-worktree in the linked worktree's own index.
     const marked = configureGeneratedArtifactIsolation(9, worktreePath);
@@ -266,6 +269,7 @@ test("test_configureGeneratedArtifactIsolation_hidesAnAlreadyTrackedBriefFromGit
     git(repoRoot, "add", "plans/brief-9.md");
     git(repoRoot, "commit", "-q", "-m", "add brief-9");
     const group: TaskGroup = { groupId: 9, taskNumbers: [9], filePaths: [], scope: "declared" };
+    catchUpStaging(repoRoot, 1);
     const worktreePath = createWorktreeForGroup(repoRoot, group);
     configureGeneratedArtifactIsolation(9, worktreePath);
     // Rewrite the tracked brief, as the pipeline does when it regenerates the brief.
@@ -290,6 +294,7 @@ test("test_configureGeneratedArtifactIsolation_leavesTheCanonicalCheckoutsIndexU
     git(repoRoot, "add", "plans/brief-9.md");
     git(repoRoot, "commit", "-q", "-m", "add brief-9");
     const group: TaskGroup = { groupId: 9, taskNumbers: [9], filePaths: [], scope: "declared" };
+    catchUpStaging(repoRoot, 1);
     const worktreePath = createWorktreeForGroup(repoRoot, group);
     configureGeneratedArtifactIsolation(9, worktreePath);
     // The canonical repo's own index still shows the file as a normal tracked entry.
@@ -301,6 +306,7 @@ test("test_configureGeneratedArtifactIsolation_isANoOpWhenNoGeneratedPathIsTrack
     // Scenario: a freshly created worktree tracks no generated-document paths.
     const repoRoot = makeTempRepoWithLocalSubmodule();
     const group: TaskGroup = { groupId: 10, taskNumbers: [10], filePaths: [], scope: "declared" };
+    catchUpStaging(repoRoot, 1);
     const worktreePath = createWorktreeForGroup(repoRoot, group);
     // No paths are marked and nothing throws.
     const marked = configureGeneratedArtifactIsolation(10, worktreePath);

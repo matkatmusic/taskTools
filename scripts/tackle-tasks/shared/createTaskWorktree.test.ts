@@ -13,6 +13,8 @@ import {
     createWorktreeForGroup, releaseTaskWorktreeLease, resolveTaskWorktreeConventionDirectory, taskWorktreeLeasePath,
 } from "../../shared/prepareTasks.ts";
 import type { TaskGroup } from "../../shared/taskGroups.ts";
+// Fixtures put staging where the locked preamble catch-up would; worktree creation only reads it.
+import { catchUpStaging } from "../../shared/catchUpStaging.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
@@ -60,6 +62,7 @@ test("test_createTaskWorktree_createsARealWorktreeOnTheTasksBranchWithSubmodules
     const { root } = makeProjectRootWithLocalSubmodule();
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: ["fileA.txt"] }]);
     claimTask(1, "run-a", root);
+    catchUpStaging(root, 1);
 
     // Test action: create the task worktree.
     const output = createTaskWorktree(1, "run-a", root);
@@ -97,6 +100,7 @@ test("test_createTaskWorktree_populatesASubmoduleWhoseGitlinkTheRemoteDoesNotHav
     const innerGitlink = git(vendor, "rev-parse", "HEAD:inner").trim();
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: ["fileA.txt"] }]);
     claimTask(1, "run-a", root);
+    catchUpStaging(root, 1);
 
     // Test action: create the task worktree.
     const output = createTaskWorktree(1, "run-a", root);
@@ -113,6 +117,7 @@ test("test_createTaskWorktree_recordsTheWorktreePathOnTheActiveRun", () => {
     const { root } = makeProjectRootWithLocalSubmodule();
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
+    catchUpStaging(root, 1);
 
     // Test action: create the worktree.
     const output = createTaskWorktree(1, "run-a", root);
@@ -129,6 +134,7 @@ test("test_createTaskWorktree_rollsBackTheWorktreeAndLeaseWhenTaskStateRecording
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
+    catchUpStaging(root, 1);
 
     // Test action + verification: the mismatched runId throws.
     assert.throws(() => createTaskWorktree(1, "run-b", root));
@@ -150,6 +156,7 @@ test("test_createTaskWorktree_retainsTheLeaseAndExactJournalWhenRemovalFails", (
     claimTask(1, "run-a", root);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
     process.env.CREATETASKWORKTREE_TEST_FORCE_REMOVAL_FAILURE = "1";
+    catchUpStaging(root, 1);
 
     try {
         // Test action + verification: rollback failure surfaces as an aggregate error.
@@ -179,6 +186,7 @@ test("test_createTaskWorktree_neverTouchesAnotherOwnersLeaseWorktreeOrBranchDuri
     claimTask(1, "run-a", root);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
     process.env.CREATETASKWORKTREE_TEST_CORRUPT_LEASE_BEFORE_ROLLBACK = "1";
+    catchUpStaging(root, 1);
 
     try {
         // Test action + verification: rollback refuses and surfaces the mismatch.
@@ -206,6 +214,7 @@ test("test_createTaskWorktree_rollsBackFullyWhenCreateWorktreeForGroupFailsAfter
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
+    catchUpStaging(root, 1);
     rmSync(join(root, ".git", "modules", "vendor"), { recursive: true, force: true });
     rmSync(submoduleOrigin, { recursive: true, force: true });
 
@@ -230,6 +239,7 @@ test("test_createTaskWorktree_recoversALateCompletedJournalWithoutTouchingTheGoo
     claimTask(1, "run-a", root);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "declared" };
+    catchUpStaging(root, 1);
     const worktree = createWorktreeForGroup(root, group, "run-a");
     updateCurrentTaskRun(1, "run-a", { worktree, leaseRunId: "run-a" }, root);
     const journalPath = taskWorktreeCreateJournalPath(expectedWorktree);
@@ -264,6 +274,7 @@ test("test_createTaskWorktree_recoversARetainedJournalWithNoTaskStateRecordedYet
     claimTask(1, "run-a", root);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "declared" };
+    catchUpStaging(root, 1);
     createWorktreeForGroup(root, group, "run-a");
     const journalPath = taskWorktreeCreateJournalPath(expectedWorktree);
     writeFileSync(journalPath, JSON.stringify({
@@ -292,6 +303,7 @@ test("test_createTaskWorktree_refusesARetainedJournalWhenAThirdOwnerHoldsThePhys
     const { root } = makeProjectRootWithLocalSubmodule();
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
+    catchUpStaging(root, 1);
     createTaskWorktree(1, "run-a", root);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
     const journalPath = taskWorktreeCreateJournalPath(expectedWorktree);
@@ -322,6 +334,7 @@ test("test_createTaskWorktree_refusesARetainedJournalOwnedByADifferentRunWithout
     const { root } = makeProjectRootWithLocalSubmodule();
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
+    catchUpStaging(root, 1);
     const created = createTaskWorktree(1, "run-a", root);
     const journalPath = taskWorktreeCreateJournalPath(created.worktree);
     writeFileSync(journalPath, JSON.stringify({
@@ -350,6 +363,7 @@ test("test_createTaskWorktree_refusesARetainedJournalWhenTaskStateMatchesButTheP
     claimTask(1, "run-a", root);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "declared" };
+    catchUpStaging(root, 1);
     const worktree = createWorktreeForGroup(root, group, "run-a");
     updateCurrentTaskRun(1, "run-a", { worktree, leaseRunId: "run-a" }, root);
     unlinkSync(taskWorktreeLeasePath(worktree));
@@ -394,6 +408,7 @@ test("test_createTaskWorktree_recoversAfterBeingKilledRightAfterAcquiringTheLeas
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
+    catchUpStaging(root, 1);
 
     // Test action: kill the child right after it acquires the lease, before any git worktree exists.
     await runCreateTaskWorktreeInChildAndKillAfter(root, 1, "run-a", "lease");
@@ -418,6 +433,7 @@ test("test_createTaskWorktree_recoversAfterBeingKilledRightAfterResettingAnExist
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "declared" };
+    catchUpStaging(root, 1);
     createWorktreeForGroup(root, group, "run-a");
     releaseTaskWorktreeLease({ worktreePath: expectedWorktree, runId: "run-a" });
     claimTask(1, "run-b", root);
@@ -479,6 +495,7 @@ test("test_createTaskWorktree_recoversAfterBeingKilledRightAfterRecordingTaskSta
     trackABriefFileInRoot(root);
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
+    catchUpStaging(root, 1);
 
     // Test action: kill right after task state is published, before isolation is configured.
     await runCreateTaskWorktreeInChildAndKillAfterOwnStep(root, 1, "run-a", "state");
@@ -505,6 +522,7 @@ test("test_createTaskWorktree_recoversAfterBeingKilledRightAfterConfiguringIsola
     trackABriefFileInRoot(root);
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
+    catchUpStaging(root, 1);
 
     // Test action: kill right after isolation is configured, before the journal is unlinked.
     await runCreateTaskWorktreeInChildAndKillAfterOwnStep(root, 1, "run-a", "isolation");
@@ -527,6 +545,7 @@ test("test_createTaskWorktree_cutsSubmoduleTaskNFromSubmoduleStagingAndWritesRes
     const { root } = makeProjectRootWithLocalSubmodule();
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
+    catchUpStaging(root, 1);
 
     // Test action: create the task worktree (a fresh cut).
     const output = createTaskWorktree(1, "run-a", root);
@@ -540,20 +559,21 @@ test("test_createTaskWorktree_cutsSubmoduleTaskNFromSubmoduleStagingAndWritesRes
     assert.equal(git(join(root, "vendor"), "rev-parse", "task-1").trim(), vendorStagingTip);
 });
 
-test("test_createTaskWorktree_advancesRootStagingToHeadWhenStagingStartsBehind", () => {
-    // Setup: staging is created early, then HEAD advances past it before the task worktree is cut.
-    const root = makeProjectRootWithCommit();
-    git(root, "branch", "staging");
-    writeFileSync(join(root, "fileB.txt"), "more\n");
-    git(root, "add", "fileB.txt");
-    git(root, "commit", "-q", "-m", "advance head");
-    const headTip = git(root, "rev-parse", "HEAD").trim();
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
-    claimTask(1, "run-a", root);
-
-    // Test action: create the task worktree.
-    createTaskWorktree(1, "run-a", root);
-
-    // Verification: staging was fast-forwarded to HEAD, not left at its old tip.
-    assert.equal(git(root, "rev-parse", "staging").trim(), headTip);
-});
+// Retired: only the locked catch-up moves staging now; see stagingWorktree.test.ts.
+// test("test_createTaskWorktree_advancesRootStagingToHeadWhenStagingStartsBehind", () => {
+//     // Setup: staging is created early, then HEAD advances past it before the task worktree is cut.
+//     const root = makeProjectRootWithCommit();
+//     git(root, "branch", "staging");
+//     writeFileSync(join(root, "fileB.txt"), "more\n");
+//     git(root, "add", "fileB.txt");
+//     git(root, "commit", "-q", "-m", "advance head");
+//     const headTip = git(root, "rev-parse", "HEAD").trim();
+//     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
+//     claimTask(1, "run-a", root);
+//
+//     // Test action: create the task worktree.
+//     createTaskWorktree(1, "run-a", root);
+//
+//     // Verification: staging was fast-forwarded to HEAD, not left at its old tip.
+//     assert.equal(git(root, "rev-parse", "staging").trim(), headTip);
+// });

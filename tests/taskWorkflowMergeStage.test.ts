@@ -8,6 +8,8 @@ import { randomUUID } from 'node:crypto'
 import { compileFunction } from 'node:vm'
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from '../scripts/shared/repositoryManifest.ts'
 import { attachOperationBranch, createWorktreeForGroup, loadRepositoryManifest, taskWorktreeLeasePath } from '../scripts/shared/prepareTasks.ts'
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from '../scripts/shared/catchUpStaging.ts'
 import {
   beginNextLap, buildMergeReport, consumeCleanupRetryResult, consumeTaskWorkflowResult, createMergeQueue,
   enqueueApprovedTask, nextQueueStep, recordStageOutcome, shouldEndQueue, type CleanupRetryEnvelope, type TaskWorkflowEnvelope,
@@ -1593,6 +1595,7 @@ test('production-shaped: the worktree prepareTasks.createWorktreeForGroup produc
   git(root, 'add', 'README.md')
   git(root, 'commit', '-q', '-m', 'init')
   addTestScript(root, 'true')
+  catchUpStaging(root, taskNumber)
   const runId = 'production-shaped-run'
   const worktreePath = createWorktreeForGroup(root, { groupId: taskNumber, taskNumbers: [taskNumber], filePaths: [], scope: 'declared' }, runId)
   // A real tackle-tasks run launches from a checkout already sitting on staging, the merge target.

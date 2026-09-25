@@ -7,21 +7,22 @@ import { git } from "../support/gitFixtures.ts";
 import { makeShapeFixture } from "../support/repoShapeFixtures.ts";
 import { assertRepoSpawned, spawnWorktree } from "./support.ts";
 
-test("spawnStaging diverged: staging becomes a merge of the old staging tip and the new HEAD", () => {
-    const fixture = makeShapeFixture("one-submodule", "ahead-head", 600);
-    for (const repo of fixture.repos) {
-        writeFileSync(join(repo.checkoutPath, "diverge.txt"), `${repo.occurrenceId}\n`);
-        git(repo.checkoutPath, "add", "diverge.txt");
-        git(repo.checkoutPath, "commit", "-q", "-m", "diverge head past staging");
-    }
-
-    const worktree = spawnWorktree(fixture, "run-diverged");
-
-    for (const repo of fixture.repos) {
-        const mergedTip = git(repo.checkoutPath, "rev-parse", "staging");
-        const newHeadTip = git(repo.checkoutPath, "rev-parse", "main");
-        const parents = git(repo.checkoutPath, "log", "-1", "--pretty=%P", mergedTip).split(" ").sort();
-        assert.deepEqual(parents, [repo.stagingTip!, newHeadTip].sort(), `${repo.occurrenceId}: merge parents`);
-        assertRepoSpawned(fixture, repo, worktree, mergedTip);
-    }
-});
+// Retired: the spawn-time staging merge moved to the locked catch-up; tests/catchUpStaging.test.ts covers it.
+// test("spawnStaging diverged: staging becomes a merge of the old staging tip and the new HEAD", () => {
+//     const fixture = makeShapeFixture("one-submodule", "ahead-head", 600);
+//     for (const repo of fixture.repos) {
+//         writeFileSync(join(repo.checkoutPath, "diverge.txt"), `${repo.occurrenceId}\n`);
+//         git(repo.checkoutPath, "add", "diverge.txt");
+//         git(repo.checkoutPath, "commit", "-q", "-m", "diverge head past staging");
+//     }
+//
+//     const worktree = spawnWorktree(fixture, "run-diverged");
+//
+//     for (const repo of fixture.repos) {
+//         const mergedTip = git(repo.checkoutPath, "rev-parse", "staging");
+//         const newHeadTip = git(repo.checkoutPath, "rev-parse", "main");
+//         const parents = git(repo.checkoutPath, "log", "-1", "--pretty=%P", mergedTip).split(" ").sort();
+//         assert.deepEqual(parents, [repo.stagingTip!, newHeadTip].sort(), `${repo.occurrenceId}: merge parents`);
+//         assertRepoSpawned(fixture, repo, worktree, mergedTip);
+//     }
+// });

@@ -2,7 +2,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { loadRepositoryManifest, resolveOrCreateStagingTipEverywhere, resolveTaskWorktreeConventionDirectory } from "../../shared/prepareTasks.ts";
+import { loadRepositoryManifest, readStagingTip, resolveTaskWorktreeConventionDirectory, STAGING_REF } from "../../shared/prepareTasks.ts";
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
@@ -64,7 +64,14 @@ function addOrVerifyLinkedWorktree(sourceCheckoutPath: string, worktreePath: str
 export function ensureStagingWorktree(projectRoot: string, rootSourceBranch: string): void {
   const rootPath = stagingWorktreePath(projectRoot);
   addOrVerifyLinkedWorktree(projectRoot, rootPath, rootSourceBranch);
-  resolveOrCreateStagingTipEverywhere(projectRoot);
+  // Only the locked catch-up moves staging; this path only reads it.
+  // resolveOrCreateStagingTipEverywhere(projectRoot);
+  const stagingSubmodulePaths = git(projectRoot, "submodule", "foreach", "--recursive", "--quiet", "echo \"$displaypath\"")
+    .split("\n")
+    .filter((line) => line.length > 0);
+  for (const repository of [...stagingSubmodulePaths.map((path) => join(projectRoot, path)), projectRoot]) {
+    if (readStagingTip(repository) === null) throw new Error(`${STAGING_REF} is missing in "${repository}"; the staging catch-up must create it`);
+  }
   const occurrences = loadRepositoryManifest(projectRoot, rootSourceBranch).occurrences
     .filter((occurrence) => occurrence.occurrenceId !== "")
     .sort((a, b) => a.depth - b.depth);

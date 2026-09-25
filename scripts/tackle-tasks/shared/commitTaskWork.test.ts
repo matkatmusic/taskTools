@@ -10,6 +10,8 @@ import { claimTask, getCurrentTaskRun } from "./taskRunState.ts";
 import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
 import { resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../../shared/catchUpStaging.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 
@@ -44,6 +46,7 @@ function makeSourceRepoWithSubmodule(): string {
 let nextGroupId = 1;
 function createLinkedWorktree(rootOrigin: string): string {
     const groupId = nextGroupId++;
+    catchUpStaging(rootOrigin, groupId);
     return createWorktreeForGroup(rootOrigin, { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" });
 }
 

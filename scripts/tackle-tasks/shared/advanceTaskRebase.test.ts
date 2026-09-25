@@ -11,6 +11,8 @@ import { acquireSourceRepoLock, buildLockOwner } from "./sourceRepoLock.ts";
 import { claimTask, getCurrentTaskRun } from "./taskRunState.ts";
 import { rebaseInProgress } from "../../merge-worktree-tasks/mergeTaskWorktrees.ts";
 import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../../shared/catchUpStaging.ts";
 import { resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
 import { REBASE_NOT_IN_PROGRESS } from "../../shared/resultCodes.ts";
@@ -98,6 +100,7 @@ test("test_advanceTaskRebase_distinguishesTheRootAndASubmoduleWithTheSameConflic
     git(rootOrigin, "add", "shared.txt");
     git(rootOrigin, "commit", "-q", "-m", "root source edit");
 
+    catchUpStaging(rootOrigin, taskNumber);
     const rebaseInput = { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-10", stepId: "rebase-10", rootSourceBranch: "staging" };
     const first = await rebaseTaskWorktree(rebaseInput);
     assert.equal(first.conflicted, true);
@@ -130,6 +133,7 @@ test("test_advanceTaskRebase_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress"
 
     advanceSourceChildBranch(rootOrigin, rootOriginChildPath, "child-source\n");
 
+    catchUpStaging(rootOrigin, taskNumber);
     const rebaseInput = { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-11", stepId: "rebase-11", rootSourceBranch: "staging" };
     const first = await rebaseTaskWorktree(rebaseInput);
     assert.equal(first.conflicted, true);

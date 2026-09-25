@@ -11,6 +11,8 @@ import { createWorktreeForGroup, readTaskWorktreeLeaseOwner, taskWorktreeLeasePa
 import { resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { git, makeCommittedRepo, addSubmodule } from "../../../tests/support/gitFixtures.ts";
 import { GIT_REF_EXISTS, GIT_REF_NOT_FOUND } from "../../shared/resultCodes.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../../shared/catchUpStaging.ts";
 
 function makeSourceRepoWithSubmodule(): string {
     const childOrigin = makeCommittedRepo("cleanup-worktree-child-", "child-main");
@@ -22,6 +24,7 @@ function makeSourceRepoWithSubmodule(): string {
 let nextGroupId = 1;
 function createLinkedWorktree(rootOrigin: string, runId: string): { worktreePath: string; taskNumber: number; branchName: string } {
     const groupId = nextGroupId++;
+    catchUpStaging(rootOrigin, groupId);
     const worktreePath = createWorktreeForGroup(
         rootOrigin, { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" }, runId,
     );

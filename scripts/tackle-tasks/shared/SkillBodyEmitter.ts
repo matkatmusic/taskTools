@@ -3,10 +3,10 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseTaskNumberArgument, parseStartingBlockArgument, parseFastArgument, parseFolderArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
-import { readTaskFile, resolveTaskFiles, taskWorkflowDirectory } from "../../shared/taskFiles.ts";
+import { readTaskFile, resolveTaskFiles, taskWorkflowDirectory, type TaskRecord } from "../../shared/taskFiles.ts";
 import { generateSteps, resolveDiagramFolderSetting, type DiagramFolderSetting } from "../generateSteps.ts";
 import { generateWorkflow } from "../generateWorkflow.ts";
-import { resolveAgentOptions } from "./resolveAgentOptions.ts";
+import { agentsDirectory, resolveAgentOptions } from "./resolveAgentOptions.ts";
 
 // RETIRED (task 10): replaced by taskWorkflowDirectory(tasksFile, taskNumber), computed per task inside skillBody.
 // const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
@@ -19,7 +19,14 @@ const WAIT_FOR_AGENT_REGISTRY_PATH = fileURLToPath(new URL("./waitForAgentRegist
 // const RESET_TASK_PATH = fileURLToPath(new URL("../resetTask.ts", import.meta.url)); // retired: the hook runs the reset now.
 
 function isTaskActive(tasksFile: string, taskNumber: number): boolean {
-  const task = readTaskFile(tasksFile).find((entry) => entry.taskNumber === taskNumber);
+  let task: TaskRecord | undefined;
+  for (const entry of readTaskFile(tasksFile)) {
+    const matchesTaskNumber = entry.taskNumber === taskNumber;
+    if (matchesTaskNumber) {
+      task = entry;
+      break;
+    }
+  }
   if (task === undefined) {
     return false;
   }
@@ -35,16 +42,20 @@ function ensureTaskWorkflowPair(tasksFile: string, taskNumber: number, diagramFo
   const workflowDirectory = taskWorkflowDirectory(tasksFile, taskNumber);
   const stepsConfigPath = join(workflowDirectory, "steps.json");
   const workflowFile = join(workflowDirectory, "workflow.js");
-  if (isTaskActive(tasksFile, taskNumber)) {
-    if (existsSync(workflowFile)) {
-      if (existsSync(stepsConfigPath)) {
+  const taskIsActive = isTaskActive(tasksFile, taskNumber);
+  if (taskIsActive) {
+    const workflowFileExists = existsSync(workflowFile);
+    if (workflowFileExists) {
+      const stepsConfigExists = existsSync(stepsConfigPath);
+      if (stepsConfigExists) {
         return { workflowFile, stepsConfigPath };
       }
     }
   }
   mkdirSync(workflowDirectory, { recursive: true });
   const folderOwnStepsPath = join(diagramFolderSetting.diagramFolder, "diagram-steps.json");
-  if (!diagramFolderSetting.allowStubs) {
+  const needsFreshSteps = !diagramFolderSetting.allowStubs;
+  if (needsFreshSteps) {
     generateSteps(diagramFolderSetting.diagramFolder, diagramFolderSetting.stepsRoot, folderOwnStepsPath, false);
   }
   if (!existsSync(stepsConfigPath)) {
@@ -85,8 +96,10 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
   if (startingBlock === "reset")
     throw new Error(`"reset" must come first: /tackle-tasks reset N [BLOCK]. Got: /tackle-tasks ${argsValue.trim()}`);
   // The harness reloads .claude/agents only on a real user turn, so files written now need a second invocation.
-  const agentsDirectory = join(projectRoot, ".claude", "agents");
-  const agentsDirectoryMissing = !existsSync(agentsDirectory);
+  // Agent files land next to tasks.json's project root (agentsDirectory(tasksFile)), not necessarily projectRoot: projectRoot is the session cwd, which can be a submodule nested under the project that owns tasks.json.
+  // const agentsDirectory = join(projectRoot, ".claude", "agents");
+  const agentsDirectoryPath = agentsDirectory(tasksFile);
+  const agentsDirectoryMissing = !existsSync(agentsDirectoryPath);
   const agentFilesMissing: number[] = [];
   for (const taskNumber of taskNumbers) {
     if (agentsDirectoryMissing) {
@@ -94,8 +107,9 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
       continue;
     }
     let hasAgentFile = false;
-    for (const name of readdirSync(agentsDirectory)) {
-      if (name.startsWith(`task-${taskNumber}-`)) {
+    for (const name of readdirSync(agentsDirectoryPath)) {
+      const matchesTaskPrefix = name.startsWith(`task-${taskNumber}-`);
+      if (matchesTaskPrefix) {
         hasAgentFile = true;
         break;
       }

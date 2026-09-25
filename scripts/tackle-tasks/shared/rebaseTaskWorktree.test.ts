@@ -12,6 +12,8 @@ import { appendTaskCommits, claimTask, getCurrentTaskRun } from "./taskRunState.
 import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
 import { resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../../shared/catchUpStaging.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 
@@ -47,6 +49,7 @@ let nextGroupId = 1;
 // The script names the branch task-<taskNumber>, so taskNumber must match the worktree's real groupId, like production.
 function createLinkedWorktree(rootOrigin: string): { worktreePath: string; taskNumber: number } {
     const groupId = nextGroupId++;
+    catchUpStaging(rootOrigin, groupId);
     const worktreePath = createWorktreeForGroup(rootOrigin, { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" });
     return { worktreePath, taskNumber: groupId };
 }

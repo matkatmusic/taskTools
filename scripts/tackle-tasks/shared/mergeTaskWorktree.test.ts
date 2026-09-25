@@ -13,6 +13,8 @@ import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
 import { currentBranchName } from "../../shared/repositoryBranches.ts";
 import { resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../../shared/catchUpStaging.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 
@@ -48,6 +50,7 @@ let nextGroupId = 1;
 // The script attaches operationBranch as "task-<taskNumber>", so taskNumber must equal the worktree's real groupId, matching production.
 function createLinkedWorktree(rootOrigin: string): { worktreePath: string; taskNumber: number } {
     const groupId = nextGroupId++;
+    catchUpStaging(rootOrigin, groupId);
     const worktreePath = createWorktreeForGroup(rootOrigin, { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" });
     return { worktreePath, taskNumber: groupId };
 }
@@ -139,6 +142,8 @@ test("test_mergeTaskWorktree_refusesWhenAnUnrelatedCleanRootCommitLandedAfterReb
     writeFileSync(join(rootOrigin, "unrelated.txt"), "unrelated\n");
     git(rootOrigin, "add", "unrelated.txt");
     git(rootOrigin, "commit", "-q", "-m", "unrelated clean root change");
+    // Another run's locked catch-up carries that commit onto staging.
+    catchUpStaging(rootOrigin, taskNumber);
 
     assert.throws(() => mergeTaskWorktree({
         projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-33", rootSourceBranch: sourceBranch,
@@ -157,6 +162,8 @@ test("test_mergeTaskWorktree_refusesWhenACommittedSourceSubmoduleChangeLandedAft
     git(rootOriginChildPath, "commit", "-q", "-m", "late source child change");
     git(rootOrigin, "add", "child");
     git(rootOrigin, "commit", "-q", "-m", "bump child gitlink for late change");
+    // Another run's locked catch-up carries that commit onto staging.
+    catchUpStaging(rootOrigin, taskNumber);
 
     assert.throws(() => mergeTaskWorktree({
         projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-34", rootSourceBranch: sourceBranch,

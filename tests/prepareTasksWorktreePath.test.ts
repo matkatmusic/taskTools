@@ -13,6 +13,8 @@ import {
 } from "../scripts/shared/prepareTasks.ts";
 import type { TaskGroup } from "../scripts/shared/taskGroups.ts";
 import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../scripts/shared/catchUpStaging.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
@@ -37,6 +39,8 @@ test("test_createWorktreeForGroup_doesNotCollideBetweenTwoReposWithTheSameBasena
     const repoA = makeTempRepoWithCommitAt(parentA, "repo");
     const repoB = makeTempRepoWithCommitAt(parentB, "repo");
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    catchUpStaging(repoA, 1);
+    catchUpStaging(repoB, 1);
 
     // Test action: prepare a worktree for the same group id in each repo.
     const worktreeA = createWorktreeForGroup(repoA, group, "run-a");

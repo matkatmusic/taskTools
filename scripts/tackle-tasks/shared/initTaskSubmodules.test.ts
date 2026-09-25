@@ -11,6 +11,8 @@ import type { TaskGroup } from "../../shared/taskGroups.ts";
 import { claimTask } from "./taskRunState.ts";
 import { resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../../shared/catchUpStaging.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
@@ -59,6 +61,7 @@ test("test_initTaskSubmodules_isANoOpAfterCreateTaskWorktree", () => {
     // Setup: createWorktreeForGroup already populates submodules as documented.
     const repoRoot = makeTempRepoWithLocalSubmodule();
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "declared" };
+    catchUpStaging(repoRoot, 1);
     const worktreePath = createWorktreeForGroup(repoRoot, group);
 
     // Test action: init submodules again.
@@ -72,6 +75,7 @@ test("test_initTaskSubmodules_reportsInitializedTrueWhenASubmoduleWasUninitializ
     // Setup: a real worktree whose submodule directory has been deinitialized.
     const repoRoot = makeTempRepoWithLocalSubmodule();
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "declared" };
+    catchUpStaging(repoRoot, 1);
     const worktreePath = createWorktreeForGroup(repoRoot, group);
     git(worktreePath, "submodule", "deinit", "-f", "vendor");
 
@@ -111,6 +115,7 @@ test("test_initTaskSubmodules_neverReturnsANonBooleanInitializationStateForAnyRe
 
     const repoRoot = makeTempRepoWithLocalSubmodule();
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "declared" };
+    catchUpStaging(repoRoot, 1);
     const alreadyPopulatedWorktree = createWorktreeForGroup(repoRoot, group);
     const deinitializedWorktree = createWorktreeForGroup(
         repoRoot, { groupId: 2, taskNumbers: [2], filePaths: [], scope: "declared" },

@@ -12,6 +12,8 @@ import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/shared
 import { REPOSITORY_MANIFEST_VERSION } from "../scripts/shared/repositoryManifest.ts";
 const prepareTasksModulePath = new URL("../scripts/shared/prepareTasks.ts", import.meta.url).href;
 import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../scripts/shared/catchUpStaging.ts";
 
 function git(cwd: string, args: string[]): void {
     execFileSync("git", args, { cwd, stdio: "ignore" });
@@ -83,6 +85,7 @@ test("test_buildWorkflowArgumentsCreatesOneWorktreePerTaskAgainstARealRepo", () 
         { taskNumber: 2, modifiableFiles: ["external/sub/src/bar.ts"] },
     ];
 
+    catchUpStaging(rootPath, 1);
     // Bun drops process.env edits for children, so only a spawned process can carry the git override.
     const script = `
         const { buildWorkflowArguments } = await import(${JSON.stringify(prepareTasksModulePath)});

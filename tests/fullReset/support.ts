@@ -6,6 +6,7 @@ import { join } from "node:path";
 import type { RepoShape } from "../support/repoShapeFixtures.ts";
 import { claimTask } from "../../scripts/tackle-tasks/shared/taskRunState.ts";
 import { createTaskWorktree } from "../../scripts/tackle-tasks/shared/createTaskWorktree.ts";
+import { catchUpStaging } from "../../scripts/shared/catchUpStaging.ts";
 import { mergeWorktreeTaskDeepestFirst } from "../../scripts/tackle-tasks/shared/occurrences.ts";
 import { defaultMergeStepOperations } from "../../scripts/merge-worktree-tasks/mergeTaskWorktrees.ts";
 
@@ -49,6 +50,8 @@ export function seedAndClaim(rootPath: string, taskNumber: number, runId: string
 
 export function spawnTask(rootPath: string, taskNumber: number, runId: string): { worktree: string; branch: string } {
     seedAndClaim(rootPath, taskNumber, runId);
+    // Worktree creation only reads staging; the locked catch-up settles it first.
+    catchUpStaging(rootPath, taskNumber);
     return createTaskWorktree(taskNumber, runId, rootPath);
 }
 

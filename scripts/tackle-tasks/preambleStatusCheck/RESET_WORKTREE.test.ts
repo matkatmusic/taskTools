@@ -9,6 +9,8 @@ import { claimTask, readTaskRunState, updateCurrentTaskRun } from "../shared/tas
 import { taskBranchName } from "../shared/createTaskWorktree.ts";
 import { createFreshTaskWorktree } from "../shared/_createFreshTaskWorktree.ts";
 import { git, addSubmodule, makeCommittedRepo } from "../../../tests/support/gitFixtures.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../../shared/catchUpStaging.ts";
 
 function seedTasksFile(root: string, tasks: unknown[]): void {
     writeFileSync(join(root, "tasks.json"), `${JSON.stringify(tasks, null, 2)}\n`);
@@ -20,6 +22,7 @@ test("test_RESET_WORKTREE_tearsDownAndRecreatesACleanWorktreeOnTheTaskBranch", (
     addSubmodule(root, submoduleOrigin, "vendor");
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", modifiableFiles: [] }]);
     claimTask(1, "run-old", root);
+    catchUpStaging(root, 1);
     const firstWorktree = createFreshTaskWorktree(1, "run-old", root);
     updateCurrentTaskRun(1, "run-old", { worktree: firstWorktree, leaseRunId: "run-old" }, root);
     writeFileSync(join(firstWorktree, "dirty.txt"), "leaked work\n");
@@ -43,6 +46,7 @@ test("test_RESET_WORKTREE_runsTwiceWithTheSameInput", () => {
     const root = makeCommittedRepo("RESET_WORKTREE-root2-");
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", modifiableFiles: [] }]);
     claimTask(1, "run-old", root);
+    catchUpStaging(root, 1);
     const firstWorktree = createFreshTaskWorktree(1, "run-old", root);
     updateCurrentTaskRun(1, "run-old", { worktree: firstWorktree, leaseRunId: "run-old" }, root);
 

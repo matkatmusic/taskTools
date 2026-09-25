@@ -12,6 +12,8 @@ import { currentBranchName } from "../scripts/shared/repositoryBranches.ts";
 import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
 import { approveRegatedTask, beginNextLap, buildMergeReport, consumeTaskWorkflowResult, createMergeQueue, currentLapIsComplete, enqueueApprovedTask, hasLapRemaining, judgeMergeRun, MAX_LAPS, nextQueueAction, nextQueueStep, nextSchedulerAction, recordMergedNotClosed, recordStageOutcome, rejectRegatedTask, shouldEndQueue } from "../scripts/shared/runMergePhase.ts";
 import { LAP_REMAINING, LAPS_EXHAUSTED, LAP_COMPLETE } from "../scripts/shared/resultCodes.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../scripts/shared/catchUpStaging.ts";
 
 test("test_hasLapRemainingAllowsExactlyTwoLapsThenStops", () => {
     assert.equal(MAX_LAPS, 2);
@@ -446,6 +448,7 @@ const makeQueueFixtureRepo = (taskNumber: number) => {
     writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { test: "true" } }));
     git(root, "add", "package.json");
     git(root, "commit", "-q", "-m", "add test script");
+    catchUpStaging(root, taskNumber);
     const worktreePath = createWorktreeForGroup(root, { groupId: taskNumber, taskNumbers: [taskNumber], filePaths: [], scope: "unknown" });
     const operationBranch = currentBranchName(worktreePath);
     mkdirSync(join(worktreePath, "plans"), { recursive: true });
@@ -1368,6 +1371,7 @@ test("literal worker commit steps commit a grandchild-owned file through every a
     writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]");
     git(root, "add", ".taskTools");
     git(root, "commit", "-q", "-m", "seed task state");
+    catchUpStaging(root, taskNumber);
 
     const origin = addBareOrigin(root);
     const prepared = prepareThroughCli(root, taskNumber);

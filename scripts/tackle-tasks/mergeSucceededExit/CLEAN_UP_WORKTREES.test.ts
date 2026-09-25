@@ -15,6 +15,8 @@ import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 import { resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
 import { git, makeCommittedRepo, addSubmodule } from "../../../tests/support/gitFixtures.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../../shared/catchUpStaging.ts";
 
 const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "CLEAN_UP_WORKTREES.template.json");
 
@@ -28,6 +30,7 @@ function makeSourceRepoWithSubmodule(): string {
 let nextGroupId = 1;
 function createLinkedWorktree(rootOrigin: string, runId: string): { worktreePath: string; taskNumber: number; branchName: string } {
     const groupId = nextGroupId++;
+    catchUpStaging(rootOrigin, groupId);
     const worktreePath = createWorktreeForGroup(
         rootOrigin, { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" }, runId,
     );

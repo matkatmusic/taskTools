@@ -16,6 +16,8 @@ import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
 import { resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
 import { REBASE_NOT_IN_PROGRESS } from "../../shared/resultCodes.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../../shared/catchUpStaging.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 
@@ -55,6 +57,7 @@ function makeSourceRepoWithSubmodule(): { rootOrigin: string; rootOriginChildPat
 let nextGroupId = 1;
 function createLinkedWorktree(rootOrigin: string): { worktreePath: string; taskNumber: number } {
     const groupId = nextGroupId++;
+    catchUpStaging(rootOrigin, groupId);
     const worktreePath = createWorktreeForGroup(rootOrigin, { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" });
     return { worktreePath, taskNumber: groupId };
 }
@@ -73,8 +76,9 @@ function advanceSourceChildBranch(rootOrigin: string, rootOriginChildPath: strin
     git(rootOriginChildPath, "commit", "-q", "-m", "advance source child");
     git(rootOrigin, "add", "child");
     git(rootOrigin, "commit", "-q", "-m", "bump child gitlink");
-    // CONTINUE_REBASE.ts discovers the root from "staging"; keep it pointed at the bumped gitlink.
-    git(rootOrigin, "update-ref", "refs/heads/staging", "HEAD");
+    // CONTINUE_REBASE.ts discovers the root from "staging"; the catch-up points every staging at the bumped gitlink.
+    // git(rootOrigin, "update-ref", "refs/heads/staging", "HEAD");
+    catchUpStaging(rootOrigin, 1);
 }
 
 function packet(

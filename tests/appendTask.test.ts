@@ -93,6 +93,13 @@ test("test_appendTaskWritesProblemSolvedByTaskOntoTheEntry", () => {
     assert.equal(entry.problemSolvedByTask, "users cannot tell why a task exists");
 });
 
+test("test_appendTaskWritesAgentOntoTheEntry", () => {
+    const projectRoot = makeTemporaryTaskRepo([]);
+    const agent = { PLAN_THE_TASK: { model: "claude-opus-5-5[1m]", effort: "medium" } };
+    const entry = appendTaskToTasksJson(minimalPayload({ agent }), projectRoot);
+    assert.deepEqual(entry.agent, agent);
+});
+
 test("test_appendTaskOmitsOptionalFieldsThatAreEmpty", () => {
     const projectRoot = makeTemporaryTaskRepo([]);
     const entry = appendTaskToTasksJson(

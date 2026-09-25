@@ -9,6 +9,8 @@ import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
 import { resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 import { git, makeCommittedRepo, addSubmodule } from "../../../tests/support/gitFixtures.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../../shared/catchUpStaging.ts";
 
 const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "RECORD_MODIFIED_FILES_SUCCESS.template.json");
 
@@ -22,6 +24,7 @@ function makeSourceRepoWithSubmodule(): string {
 let nextGroupId = 1;
 function createLinkedWorktree(rootOrigin: string): string {
     const groupId = nextGroupId++;
+    catchUpStaging(rootOrigin, groupId);
     return createWorktreeForGroup(rootOrigin, { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" });
 }
 

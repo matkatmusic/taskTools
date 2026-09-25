@@ -5,6 +5,7 @@ import assert from "node:assert";
 import { git } from "../support/gitFixtures.ts";
 import { makeShapeFixture, type RepoNode, type ShapeFixture } from "../support/repoShapeFixtures.ts";
 import { createTaskWorktree } from "../../scripts/tackle-tasks/shared/createTaskWorktree.ts";
+import { catchUpStaging } from "../../scripts/shared/catchUpStaging.ts";
 import { claimTask } from "../../scripts/tackle-tasks/shared/taskRunState.ts";
 import { mergeWorktreeTaskDeepestFirst } from "../../scripts/tackle-tasks/shared/occurrences.ts";
 import type { MergeTaskWalkReport } from "../../scripts/merge-worktree-tasks/mergeTaskWorktrees.ts";
@@ -77,6 +78,8 @@ export function spawnWorktree(fixture: ShapeFixture): Spawned {
         `${JSON.stringify([{ taskNumber: TASK_NUMBER, title: "t", modifiableFiles: [] }], null, 2)}\n`,
     );
     claimTask(TASK_NUMBER, RUN_ID, projectRoot);
+    // Worktree creation only reads staging; the locked catch-up settles it first.
+    catchUpStaging(projectRoot, TASK_NUMBER);
     const { worktree } = createTaskWorktree(TASK_NUMBER, RUN_ID, projectRoot);
     return { fixture, worktree, projectRoot };
 }

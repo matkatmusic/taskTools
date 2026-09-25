@@ -6,6 +6,7 @@ import { git } from "../support/gitFixtures.ts";
 import type { RepoNode, ShapeFixture, StagingState } from "../support/repoShapeFixtures.ts";
 import { createTaskWorktree } from "../../scripts/tackle-tasks/shared/createTaskWorktree.ts";
 import { claimTask } from "../../scripts/tackle-tasks/shared/taskRunState.ts";
+import { catchUpStaging } from "../../scripts/shared/catchUpStaging.ts";
 
 // Seeds tasks.json with one task record and claims it, exactly as createTaskWorktree.test.ts does.
 function seedTaskAndClaim(root: string, taskNumber: number, runId: string): void {
@@ -19,6 +20,8 @@ function seedTaskAndClaim(root: string, taskNumber: number, runId: string): void
 // Seeds the task, then calls the spawn entry point under test. Returns the new worktree path.
 export function spawnWorktree(fixture: ShapeFixture, runId: string): string {
     seedTaskAndClaim(fixture.rootPath, fixture.taskNumber, runId);
+    // Worktree creation only reads staging; the locked catch-up settles it first.
+    catchUpStaging(fixture.rootPath, fixture.taskNumber);
     return createTaskWorktree(fixture.taskNumber, runId, fixture.rootPath).worktree;
 }
 
@@ -27,9 +30,10 @@ function repoRelativePath(fixture: ShapeFixture, repo: RepoNode): string {
     return relative(fixture.rootPath, repo.checkoutPath);
 }
 
-// absent/at-head/behind-head all settle staging at HEAD; ahead-head leaves the prior merge tip untouched.
+// The catch-up settles staging (tests/catchUpStaging.test.ts); spawn must cut every ref from wherever it left it.
 export function expectedStagingTip(repo: RepoNode, state: StagingState): string {
-    return state === "ahead-head" ? repo.stagingTip! : repo.headTip;
+    // return state === "ahead-head" ? repo.stagingTip! : repo.headTip;
+    return git(repo.checkoutPath, "rev-parse", "staging");
 }
 
 // One repo's four spawn invariants: source task-N ref, source reset-point ref, worktree branch, worktree HEAD.

@@ -29,7 +29,7 @@ export const FALLBACK_REVIEWER_AGENTS: Record<string, AgentOptions> = {
 // export const FENCED_BAND_BLOCKS = new Set(["IMPLEMENT_TASK", "FIX_IMPLEMENT_TASK_TESTS", "FIX_THE_CODEBASE_FOR_SUITE"]);
 
 // Duplicates taskWorkflowDirectory's project-root logic on purpose: this call site only ever has a bare tasksFile string.
-function agentsDirectory(tasksFile: string): string {
+export function agentsDirectory(tasksFile: string): string {
   const taskDirectory = dirname(tasksFile);
   const projectRoot = basename(taskDirectory) === ".taskTools" ? dirname(taskDirectory) : taskDirectory;
   return join(projectRoot, ".claude", "agents");

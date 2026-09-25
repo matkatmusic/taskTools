@@ -12,6 +12,8 @@ import { claimTask } from "../scripts/tackle-tasks/shared/taskRunState.ts";
 import { createTaskWorktree } from "../scripts/tackle-tasks/shared/createTaskWorktree.ts";
 import { main as rebaseMain } from "../scripts/tackle-tasks/rebase/REBASE_ONTO_TARGET_BRANCH.ts";
 import { main as mergeMain } from "../scripts/tackle-tasks/runFullSuite/MERGE_WORKTREES.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../scripts/shared/catchUpStaging.ts";
 
 function fixtureTmpRoot(fixture: { rootPath: string }): string {
     return dirname(fixture.rootPath);
@@ -95,6 +97,7 @@ test("test_pipeline_worktreeCommitRebaseMerge_expectationsPerRepo", { timeout: 3
             `${JSON.stringify([{ taskNumber: TASK_NUMBER, title: "t", modifiableFiles: [] }], null, 2)}\n`,
         );
         claimTask(TASK_NUMBER, RUN_ID, fixture.rootPath);
+        catchUpStaging(fixture.rootPath, TASK_NUMBER);
         const { worktree, branch } = createTaskWorktree(TASK_NUMBER, RUN_ID, fixture.rootPath);
         assert.equal(branch, BRANCH);
 

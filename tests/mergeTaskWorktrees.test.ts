@@ -31,6 +31,8 @@ import type { MergeStepOperations } from "../scripts/merge-worktree-tasks/mergeT
 import { REASON_NO_TEST_CONFIGURATION } from "../scripts/shared/testPolicy.ts";
 import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
 import { GIT_PATH_PRESENT, GIT_PATH_ABSENT } from "../scripts/shared/resultCodes.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../scripts/shared/catchUpStaging.ts";
 
 const SCRIPT = join(import.meta.dirname, "..", "scripts", "merge-worktree-tasks", "mergeTaskWorktrees.ts");
 
@@ -50,6 +52,7 @@ function makeTempRepoWithCommit(): string {
 }
 
 function makeGroup(repoRoot: string, groupId: number): PreparedGroup {
+    catchUpStaging(repoRoot, groupId);
     const worktree = createWorktreeForGroup(repoRoot, { groupId, taskNumbers: [groupId], filePaths: [], scope: "unknown" });
     return { groupId, worktree, branch: `task-${groupId}`, scope: "unknown", tasks: [] };
 }

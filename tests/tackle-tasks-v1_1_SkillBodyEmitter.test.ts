@@ -12,6 +12,8 @@ import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts
 import { consumeTaskWorkflowResult, createMergeQueue } from "../scripts/shared/runMergePhase.ts";
 import { V1_1_WORKFLOW_TEMPLATE_PATH, buildWorkflowArguments, materializeTaskWorkflow, v1_1WorkflowOutputPath } from "../scripts/shared/prepareTasks.ts";
 import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
+// Fixtures put staging where the locked preamble catch-up would.
+import { catchUpStaging } from "../scripts/shared/catchUpStaging.ts";
 
 const scriptPath = fileURLToPath(new URL("../scripts/tackle-tasks-v1_1/tackle-tasks-v1_1_SkillBodyEmitter.ts", import.meta.url));
 const skillMdPath = fileURLToPath(new URL("../skills/tackle-tasks-v1_1/SKILL.md", import.meta.url));
@@ -119,6 +121,7 @@ test("real lease mechanism: a whole-array prepare followed by a per-task re-prep
   execFileSync("git", ["-C", root, "add", "README.md"]);
   execFileSync("git", ["-C", root, "commit", "-q", "-m", "init"]);
   execFileSync("git", ["-C", root, "remote", "add", "origin", "https://example.com/root.git"]);
+  catchUpStaging(root, 1);
 
   const tasks: TaskRecord[] = [
     { taskNumber: 1, modifiableFiles: ["README.md"] } as TaskRecord,
